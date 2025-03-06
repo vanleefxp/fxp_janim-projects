@@ -67,12 +67,15 @@ def createPowerSeries(
     termSym: str = "x",
     startPow: int = 0,
     idxOffset: int = 0,
+    align: bool = True,
+    prefixPad: float = 0.3,
+    coefStep: float = 0.4,
+    termStep: float = 0.4,
+    signStep: float = 0.5,
+    startX: float = -4,
     **kwargs,
 ) -> TypstMath:
-    # 创建幂级数公式
-    mob_coefGroup = Group()
-    mob_termGroup = Group()
-    mob_otherGroup = Group()
+    # 创建公式对象
     src = f"{prefix} "
     if n >= 0 and startPow <= 0:
         src += f"{coefSym}_{idxOffset} + "
@@ -81,30 +84,67 @@ def createPowerSeries(
     for i in range(max(2, startPow), n + startPow + 1):
         src += f"{coefSym}_{i + idxOffset} {termSym}^{i} + "
     src += "..."
-    mob_powerSeriesText = TypstMath(src, **kwargs)
-    # 对公式文本进行分组处理
+    mob_text = TypstMath(src, **kwargs)
+
+    # 子对象切分
+    mob_text.mob_coefs = mob_coefs = Group()
+    mob_text.mob_terms = mob_terms = Group()
+    mob_text.mob_others = mob_others = Group()
+    mob_text.mob_gridItems = mob_gridItems = Group()
     start = 0
     end = len(TypstMath(prefix))
     # f(x) =
-    mob_otherGroup.add(mob_powerSeriesText[:end])
+    mob_text.mob_prefix = mob_prefix = mob_text[:end]
+    mob_others.add(mob_prefix)
+    mob_gridItems.add(mob_prefix)
     for i in range(startPow, n + startPow + 1):
         start = end
         l1, l2 = _powerSeriesTermCharCount(i, idxOffset)
         end += l1 + l2 + 1
         mid = start + l1
         # 幂级数的系数 a_n
-        mob_coefGroup.add(mob_powerSeriesText[start:mid])
+        mob_coefs.add(mob_text[start:mid])
+        mob_gridItems.add(mob_text[start:mid])
         # 幂级数的指数 x^n
-        mob_termGroup.add(mob_powerSeriesText[mid : end - 1])
+        mob_terms.add(mob_text[mid : end - 1])
+        mob_gridItems.add(mob_text[mid : end - 1])
         # 加号
-        mob_otherGroup.add(mob_powerSeriesText[end - 1])
+        mob_others.add(mob_text[end - 1])
+        mob_gridItems.add(mob_text[end - 1])
 
-    mob_powerSeriesText.mob_coefs = mob_coefGroup
-    mob_powerSeriesText.mob_terms = mob_termGroup
-    mob_powerSeriesText.mob_ellipsis = mob_powerSeriesText[end:]
-    mob_powerSeriesText.mob_others = mob_otherGroup
+    mob_text.mob_ellipsis = mob_ellipsis = mob_text[end:]
+    mob_gridItems.add(mob_ellipsis)
 
-    return mob_powerSeriesText
+    if align:
+        # 手动对齐
+        mob_text.alignParams = alignParams = lambda: None
+        alignParams.prefixPad = prefixPad
+        alignParams.coefStep = coefStep
+        alignParams.termStep = termStep
+        alignParams.signStep = signStep
+        alignParams.totalStep = coefStep + termStep + signStep
+
+        # 前缀
+        mob_gridItems[0].points.set_x(-prefixPad + startX, RIGHT)
+        align_x = startX
+        for i in range(1, len(mob_gridItems)):
+            mob_gridItems[i].points.set_x(align_x, LEFT)
+            match i % 3:
+                case 0:  # 系数
+                    align_x += coefStep
+                case 1:  # x 的幂次
+                    align_x += termStep
+                case 2:  # 加号
+                    align_x += signStep
+
+    return mob_text
+
+
+def createPsBoxes(mob_ps: TypstMath, **kwargs):
+    mob_boxes = Group()
+    for mob_coef in mob_ps.mob_coefs:
+        mob_boxes.add(SurroundingRect(mob_coef, **kwargs))
+    return mob_boxes
 
 
 def _coefSrcGenerator(
@@ -113,12 +153,12 @@ def _coefSrcGenerator(
     if coef1Sym == coef2Sym:
         for j in range(i + 1):
             if i == j * 2 and useSqr:
-                yield f"&{coef1Sym}_{j}^2"
+                yield f"{coef1Sym}_{j}^2"
             else:
-                yield f"&{coef1Sym}_{j} {coef1Sym}_{i-j}"
+                yield f"{coef1Sym}_{j} {coef1Sym}_{i-j}"
     else:
         for j in range(i + 1):
-            yield f"&{coef1Sym}_{j} {coef2Sym}_{i-j}"
+            yield f"{coef1Sym}_{j} {coef2Sym}_{i-j}"
 
 
 def _psProdCoefChCount(i, j, useSqr=False):
@@ -135,36 +175,37 @@ def _psProdTermChCount(i):
 
 def createPowerSeriesProduct(
     n: int = 8,
-    prefix: str = "f(x) g(x) &=",
+    prefix: str = "&f(x) g(x) &&=",
     coef1Sym: str = "a",
     coef2Sym: str = "b",
     termSym: str = "x",
     useSqr: bool = True,
     **kwargs,
 ):
-    # 创建两个幂级数的乘积公式
-    src = f"{prefix}"
+    # 生成公式对象
+    src = prefix
     if n > 0:
         if coef1Sym == coef2Sym and useSqr:
-            src += f'&op(" ") &{coef1Sym}_0^2 \\\n&+ '
+            src += f"&& &&{coef1Sym}_0^2 \\\n&&&+ "
         else:
-            src += f'&op(" ") &{coef1Sym}_0 {coef2Sym}_0 \\\n&+ '
+            src += f"&& &&{coef1Sym}_0 {coef2Sym}_0 \\\n&&&+ "
     if n > 1:
         src += (
-            f'&( op(" ") '
-            f'&{coef1Sym}_0 {coef2Sym}_1 &+ &{coef1Sym}_1 {coef2Sym}_0 op(" ") &) op(" ") '
-            f"&{termSym} \\\n&+ "
+            f'&& " " ( " "'
+            f'&&{coef1Sym}_0 {coef2Sym}_1 &&+ &&{coef1Sym}_1 {coef2Sym}_0 && ) " " '
+            f"&&{termSym} \\\n&&&+ "
         )
     for i in range(2, n + 1):
         src += (
-            f'&( op(" ")'
-            + " &+ ".join(_coefSrcGenerator(i, coef1Sym, coef2Sym, useSqr))
-            + ' op(" ") &) op(" ") '
-            + f"&{termSym}^{i} \\\n&+ "
+            f'&& " " ( " " &&'
+            + " &&+ &&".join(_coefSrcGenerator(i, coef1Sym, coef2Sym, useSqr))
+            + (' && " " ) " " ' if i == n else ' && ) " " ')
+            + f"&&{termSym}^{i} \\\n&&&+ "
         )
-    src += '&op(" ") &......'
+    src += "&& &&......"
     mob_text = TypstMath(src, **kwargs)
 
+    # 子对象切分
     prefixLen = len(TypstMath(prefix))
     mob_text.mob_prefix = mob_text[:prefixLen]
     mob_terms = mob_text.mob_terms = Group(Group())
@@ -227,14 +268,17 @@ def createPowerSeriesRec(
     startDeg: int = 0,
     idxOffset: int = 0,
 ):
+    # 生成公式对象
     src = ""
     if n > 0 and startDeg <= 0:
-        src += f'&{coefSym}_{idxOffset} &op(" ") &arrow.l\\\n'
+        src += f"&{coefSym}_{idxOffset} &&&arrow.l\\\n"
     if n > 1 and startDeg <= 1:
-        src += f'&{coefSym}_{1 + idxOffset} &{termSym}^(op(" ")) &arrow.l\\\n'
+        src += f"&{coefSym}_{1 + idxOffset} &&{termSym} &arrow.l\\\n"
     for i in range(max(2, startDeg), n + 1):
-        src += f"&{coefSym}_{i + idxOffset} &{termSym}^{i} &arrow.l\\\n"
+        src += f"&{coefSym}_{i + idxOffset} &&{termSym}^{i} &arrow.l\\\n"
     mob_text = TypstMath(src)
+
+    # 子对象切分
     mob_lines = mob_text.mob_lines = Group()
     mob_coefs = mob_text.mob_coefs = Group()
     mob_terms = mob_text.mob_terms = Group()
@@ -670,6 +714,10 @@ class CatalanScene(Timeline):
         mob_binom1.points.next_to(mob_grids.c2p(n, n), RIGHT)
         mob_binom2.points.next_to(mob_grids.c2p(n + 1, n - 1), RIGHT)
         mob_catalanFormula.points.shift((4, 1, 0)).scale(1.5)
+        for mob in (mob_binom1, mob_binom2):
+            mob.set_stroke_background(True)
+            mob.radius.set(0.05)
+            mob.stroke.set(color=BLACK)
 
         self.play(FadeIn(mob_binom1))
         self.play(mob_binom1.anim.points.move_to((4, 0.5, 0)).scale(1.5))
@@ -712,11 +760,13 @@ class CatalanScene(Timeline):
         self.play(pathAc1.ag_changeColor, FadeIn(mob_stopCoordText), duration=0.5)
         self.play(Create(mob_lowerLine))
         vec = mob_grids.c2p(1, -1) - coordOrigin
+        turning_rf = ease_inout_sine
         self.play(
             pathAc1.ag_flip,
             mob_stopFlag.anim.points.shift(vec),
             Transform(mob_stopCoordText, mob_flippedCoordText),
-            duration=0.5,
+            rate_func=turning_rf,
+            duration=4,
         )
         self.play(Flash(mob_grids.c2p(n + 1, n - 1)))
         self.forward(1)
@@ -724,14 +774,16 @@ class CatalanScene(Timeline):
             pathAc1.ag_revert,
             mob_stopFlag.anim.points.shift(-vec),
             Transform(mob_flippedCoordText, mob_stopCoordText),
-            duration=0.5,
+            rate_func=turning_rf,
+            duration=2,
         )
         self.forward(0.5)
         self.play(
             pathAc1.ag_flip,
             mob_stopFlag.anim.points.shift(vec),
             Transform(mob_stopCoordText, mob_flippedCoordText),
-            duration=0.5,
+            rate_func=turning_rf,
+            duration=2,
         )
         self.play(FadeOut(pathAc1.mob_flippedPath), FadeOut(mob_focusBox), duration=0.5)
 
@@ -755,7 +807,8 @@ class CatalanScene(Timeline):
             pathAc2.ag_revert,
             mob_stopFlag.anim.points.shift(-vec),
             Transform(mob_flippedCoordText, mob_stopCoordText),
-            duration=0.5,
+            rate_func=turning_rf,
+            duration=2,
         )
         self.play(FadeIn(mob_blackRect))
         blink(pathAc2.mob_badSegs)
@@ -764,7 +817,8 @@ class CatalanScene(Timeline):
             mob_stopFlag.anim.points.shift(vec),
             FadeOut(mob_stopCoordText),
             FadeOut(mob_blackRect),
-            duration=0.5,
+            rate_func=turning_rf,
+            duration=2,
         )
         self.play(FadeIn(mob_binom2))
         self.play(
@@ -772,7 +826,8 @@ class CatalanScene(Timeline):
             mob_stopFlag.anim.points.shift(-vec),
             FadeIn(mob_blackRect),
             mob_binom2.anim.points.next_to(mob_grids.c2p(n, n), RIGHT),
-            duration=0.5,
+            rate_func=turning_rf,
+            duration=2,
         )
 
         mob_binom3 = TypstMath(
@@ -800,7 +855,7 @@ class CatalanScene(Timeline):
         self.play(AnimGroup(*map(Write, mob_anTexts), lag_ratio=0.25), duration=3)
 
         showingPow = 4
-        mob_psText = createPowerSeries(showingPow)
+        mob_psText = createPowerSeries(showingPow, align=False)
         mob_psText.points.move_to((3, -1, 0))
 
         ag = []
@@ -990,8 +1045,25 @@ class CatalanScene(Timeline):
         mob_catalanFormula2 = TypstMath("a_(n) = sum_(k = 1)^(n) a_(k - 1) a_(n - k)")
         mob_catalanFormula2.points.move_to((4, 1, 0))
 
+        showingPow2 = 6
+        mob_psText1 = createPowerSeries(showingPow2)
+        mob_psText2 = createPowerSeries(showingPow2)
+        for mob in mob_psText1.mob_coefs:
+            mob[0].color.set(GREEN)
+        for mob in mob_psText2.mob_coefs:
+            mob[0].color.set(BLUE)
+        mob_psText1.points.to_border(UP, 0.75)
+        mob_psText2.points.next_to(mob_psText1, DOWN, buff=0.3)
+
+        mob_psProdText = createPowerSeriesProduct(
+            showingPow2,
+            prefix="&&f^2(x) &=",
+            coef2Sym="a",
+            useSqr=False,
+        )
+
         self.play(
-            mob_psText.anim.points.to_center().to_border(UP, 0.75),
+            TransformMatchingShapes(mob_psText, mob_psText1),
             Transform(mob_catalanFormula, mob_catalanFormula2),
             FadeOut(
                 Group(
@@ -1013,31 +1085,7 @@ class CatalanScene(Timeline):
                 )
             ),
         )
-
-        def createPsBoxes(mob_ps: TypstMath, **kwargs):
-            mob_boxes = Group()
-            for mob_coef in mob_ps.mob_coefs:
-                mob_boxes.add(SurroundingRect(mob_coef, **kwargs))
-            return mob_boxes
-
-        showingPow2 = 6
-        mob_psText1 = createPowerSeries(showingPow2)
-        mob_psText2 = createPowerSeries(showingPow2)
-        for mob in mob_psText1.mob_coefs:
-            mob[0].color.set(GREEN)
-        for mob in mob_psText2.mob_coefs:
-            mob[0].color.set(BLUE)
-        mob_psText1.points.move_to(mob_psText)
-        mob_psText2.points.next_to(mob_psText1, DOWN, buff=0.3)
-
-        mob_psProdText = createPowerSeriesProduct(
-            showingPow2,
-            prefix="f^2(x) &=",
-            coef2Sym="a",
-            useSqr=False,
-        )
-
-        self.play(TransformMatchingShapes(mob_psText, mob_psText1), duration=0.5)
+        # self.play(TransformMatchingShapes(mob_psText, mob_psText1), duration=0.5)
         self.play(Transform(mob_psText1, mob_psText2, hide_src=False), duration=0.5)
 
         mob_psProdText.points.next_to(mob_psText2, DOWN, buff=0.5)
@@ -1103,17 +1151,26 @@ class CatalanScene(Timeline):
         self.play(AnimGroup(*reversed(ag2[:-1]), lag_ratio=0.5))
         self.forward(2)
 
-        mob_dividingLine = Line(ORIGIN, (12, 0, 0))
+        mob_dividingLine2 = Line(ORIGIN, (12, 0, 0))
         mob_psText3 = createPowerSeries(showingPow2, prefix="f^2(x) =", idxOffset=1)
-        mob_psText4 = createPowerSeries(showingPow2, prefix="x f^2(x) =", startPow=1)
+        mob_psText3Tr = createPowerSeries(
+            showingPow2 - 1, prefix="f^2(x) =", idxOffset=1
+        )
+        mob_psText4 = createPowerSeries(
+            showingPow2 - 1, prefix="x f^2(x) =", startPow=1
+        )
         mob_psText5 = createPowerSeries(showingPow2, prefix="x f^2(x) + 1 =")
-        mob_dividingLine.points.next_to(mob_psText2, DOWN, buff=0.3)
-        mob_dividingLine.radius.set(0.015)
-        mob_psText3.points.next_to(mob_dividingLine, DOWN, buff=0.3)
-        mob_psText4.points.next_to(mob_psText3, DOWN, buff=0.3)
-        mob_psText5.points.next_to(mob_psText4, DOWN, buff=0.3)
+        mob_dividingLine2.points.next_to(mob_psText2, DOWN, buff=0.3)
+        mob_dividingLine2.radius.set(0.015)
+        for mob in mob_psText3, mob_psText3Tr:
+            mob.points.next_to(mob_dividingLine2, DOWN, buff=0.3, coor_mask=UP)
+        mob_psText4.points.next_to(mob_psText3, DOWN, buff=0.3, coor_mask=UP)
+        for mob in mob_psText3Tr, mob_psText4:
+            mob.mob_gridItems[1:].points.shift(RIGHT * mob.alignParams.totalStep)
+        mob_psText5.points.next_to(mob_psText4, DOWN, buff=0.3, coor_mask=UP)
+        mob_boxes3 = createPsBoxes(mob_psText3, color=ORANGE, buff=0.05)
 
-        for mob_ps in mob_psText3, mob_psText4:
+        for mob_ps in mob_psText3, mob_psText3Tr, mob_psText4:
             for mob_coef in mob_ps.mob_coefs:
                 mob_coef[0].color.set(ORANGE)
 
@@ -1137,7 +1194,37 @@ class CatalanScene(Timeline):
             FadeOut(mob_psProdText.mob_noPrefix),
             FadeOut(mob_recursiveTerms.mob_arrows),
             FadeOut(mob_catalanFormula2),
-            Create(mob_dividingLine),
+            Create(mob_dividingLine2),
+        )
+        self.forward(1)
+
+        mob_showingBox2 = mob_showingBox3 = None
+        for i in range(showingPow2):
+            mob_box2 = mob_boxes2[i + 1]
+            mob_box3 = mob_boxes3[i]
+            if mob_showingBox2 is None:
+                self.play(FadeIn(Group(mob_box2, mob_box3)), duration=0.4)
+            else:
+                self.play(
+                    Transform(mob_showingBox2, mob_box2),
+                    Transform(mob_showingBox3, mob_box3),
+                    duration=0.4,
+                    rate_func=rush_from,
+                )
+            mob_showingBox2 = mob_box2
+            mob_showingBox3 = mob_box3
+            self.forward(0.2)
+        self.play(FadeOut(Group(mob_showingBox2, mob_showingBox3)), duration=0.4)
+
+        self.forward(0.5)
+        self.play(
+            TransformMatchingShapes(
+                mob_psText3,
+                mob_psText3Tr,
+                mismatch=(FadeOut, FadeIn),
+                collapse=False,
+            ),
+            duration=1,
         )
 
         def animatePsTransform(mob_ps1, mob_ps2, offset=0, matchOthers=False):
@@ -1191,8 +1278,34 @@ class CatalanScene(Timeline):
                 duration=1,
             )
 
-        animatePsTransform(mob_psText3, mob_psText4)
-        animatePsTransform(mob_psText4, mob_psText5, offset=1)
+        self.forward(1)
+        self.play(
+            Transform(
+                mob_psText3Tr.mob_gridItems[0],
+                mob_psText4.mob_gridItems[0],
+                hide_src=False,
+            ),
+            TransformMatchingShapes(
+                mob_psText3Tr.mob_gridItems[1:].copy(),
+                mob_psText4.mob_gridItems[1:],
+                mismatch=(FadeOut, FadeIn),
+                duration=1,
+            ),
+        )
+        self.forward(1)
+        self.play(
+            TransformMatchingShapes(
+                mob_psText4.mob_gridItems[0].copy(),
+                mob_psText5.mob_gridItems[0],
+                duration=1,
+            ),
+            FadeIn(mob_psText5.mob_gridItems[1:4]),
+            TransformMatchingShapes(
+                mob_psText4.mob_gridItems[1:].copy(),
+                mob_psText5.mob_gridItems[4:],
+                duration=1,
+            ),
+        )
 
         # 生成函数所满足的方程及其表达式
         mob_gfEquation = TypstMath("f(x) = x f^2(x) + 1")
@@ -1203,32 +1316,52 @@ class CatalanScene(Timeline):
         )
         mob_gfEquation.points.move_to((-2.5, -1.75, 0))
         mob_gf.points.move_to((2.5, -1.7, 0))
-        mob_gfProcess.points.shift(DOWN * 1.5)
-        mob_gfResult.points.next_to(mob_gfProcess, DOWN, buff=1)
+        mob_gfProcess.points.shift(DOWN * 1.75)
+        mob_gfResult.points.next_to(mob_gfProcess, DOWN, buff=0.75)
 
         self.play(Write(mob_gfEquation))
         self.play(Transform(mob_gfEquation, mob_gf, hide_src=False))
+        self.forward(2)
         self.play(
             FadeOut(
                 Group(
                     mob_psText1,
                     mob_psText2,
-                    mob_dividingLine,
-                    mob_psText3,
+                    mob_dividingLine2,
+                    mob_psText3Tr,
                     mob_psText4,
                     mob_psText5,
                 )
             ),
-            Group(mob_gfEquation, mob_gf).anim.points.shift(UP * 5),
+            Group(mob_gfEquation, mob_gf).anim.points.shift(UP * 4.5),
         )
         self.play(Write(mob_gfProcess), duration=2)
         self.play(Transform(mob_gfProcess, mob_gfResult, hide_src=False))
         self.play(ShowPassingFlashAround(mob_gfResult, time_width=3, duration=1))
         self.forward(2)
+        pathAc.restoreColor()
+        self.play(
+            FadeOut(Group(mob_gfEquation, mob_gf, mob_gfProcess, mob_gfResult)),
+            FadeIn(
+                Group(
+                    mob_grids,
+                    mob_startFlag,
+                    mob_stopFlag,
+                    mob_blackRect,
+                    mob_dividingLine,
+                    pathAc.mob_path,
+                )
+            ),
+        )
 
+        mob_catalanTermFormula = TypstMath("a_n = 1/(n + 1) binom(2n, n)")
+        mob_catalanTable = TypstDoc((DIR / "assets/catalan-table.typ").read_text())
+        mob_catalanTermFormula.points.scale(1.5).move_to((3.75, 1.5, 0))
+        mob_catalanTable.points.move_to((2.25, -1, 0))
+        self.play(Write(mob_catalanTermFormula))
+        self.play(Write(mob_catalanTable))
 
-class CatalanGenFuncScene(Timeline):
-    def construct(self): ...
+        self.forward(2)
 
 
 if __name__ == "__main__":
@@ -1266,4 +1399,3 @@ if __name__ == "__main__":
 ########################################################################################################################
 ########################################################################################################################
 ########################################################################################################################
-##################################
