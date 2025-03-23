@@ -476,6 +476,26 @@ class Chord(PositionedStaffElement):
 
 
 class Note(Chord):
+    @classmethod
+    def fromNotation(
+        cls,
+        parent: Staff,
+        p: fz.PitchBase,
+        cVpos: int = -6,
+        showNatural: bool = False,
+        color: JAnimColor | Callable[[fz.PitchBase], JAnimColor] | None = None,
+        **kwargs,
+    ) -> Self:
+        acci = p.acci
+        if not showNatural and acci == 0:
+            acci = None
+        i_note = cls(parent, p.deg + cVpos, acci=acci, **kwargs)
+        if callable(color):
+            color = color(p)
+        if color is not None:
+            i_note.i_notehead.color.set(color)
+        return i_note
+
     def __init__(
         self,
         parent: Staff,
@@ -511,13 +531,16 @@ class Scale(StaffElement[Note]):
     def fromNotation(
         cls,
         parent: Staff,
-        scale: fz.Scale,
+        scale: fz.Scale | Iterable[fz.PitchBase],
         cVpos: int = -6,
         color: JAnimColor | Callable[[fz.PitchBase], JAnimColor] | None = None,
         **kwargs,
     ):
-        tonicDeg = scale.tonic.deg
-        vpos = (tonicDeg + p.deg + cVpos for p in scale.mode)
+        if isinstance(scale, fz.Scale):
+            tonicDeg = scale.tonic.deg
+            vpos = (tonicDeg + p.deg + cVpos for p in scale.mode)
+        else:
+            vpos = (p.deg + cVpos for p in scale)
         accis = ((None if p.acci == 0 else p.acci) for p in scale)
         i_scale = cls(parent, vpos, accis=accis, **kwargs)
         if color is not None:

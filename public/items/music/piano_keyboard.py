@@ -6,6 +6,7 @@ import itertools as it
 from janim.imports import *
 import pyrsistent as pyr
 import numpy as np
+import fantazia as fz
 
 from .. import PositionedVItem
 
@@ -390,9 +391,11 @@ class _PianoKeyboardKeyAccessor:
     def __getitem__(self, idx: int) -> PianoKey: ...
 
     @overload
-    def __getitem__(self, idx: slice | Iterable[int]) -> KeyGroup: ...
+    def __getitem__(self, idx: slice | Iterable[int | fz.PitchBase]) -> KeyGroup: ...
 
-    def __getitem__(self, idx: int | slice) -> PianoKey | KeyGroup:
+    def __getitem__(
+        self, idx: int | fz.PitchBase | slice | Iterable[int | fz.PitchBase]
+    ) -> PianoKey | KeyGroup:
         startKey = self._parent.keyRange[0]
         if isinstance(idx, slice):
             start = 0 if idx.start is None else idx.start - startKey
@@ -404,6 +407,8 @@ class _PianoKeyboardKeyAccessor:
             # this is probably a bug of JAnim
             return KeyGroup(*(self._parent._i_keys[int(i - startKey)] for i in idx))
         else:
+            if isinstance(idx, fz.PitchBase):
+                idx = round(idx.tone)
             return self._parent._i_keys[int(idx - startKey)]
 
     def __len__(self) -> int:

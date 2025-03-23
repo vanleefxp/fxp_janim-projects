@@ -836,6 +836,352 @@ class TL_ScaleTranslation(Timeline):
         self.forward(2)
 
 
+class TL_Accidentals(Timeline):
+    CONFIG = Config(font=_textFont)
+
+    def construct(self):
+        i_keyboard = PianoKeyboard(keyRange=(-12, 36))
+        i_staff = Staff(**_staffConfig, staffLength=66)
+
+        i_keyboard.points.to_center().shift(1.5 * UP)
+        i_staff.points.to_center().shift(1.25 * DOWN)
+
+        notes = (
+            fz.Pitch("C_0"),
+            fz.Pitch("C+_0"),
+            fz.Pitch("D_0"),
+            fz.Pitch("D-_0"),
+            fz.Pitch("G_0"),
+            fz.Pitch("G+_0"),
+            fz.Pitch("A_0"),
+            fz.Pitch("A-_0"),
+        )
+        notes2 = (
+            fz.Pitch("F_0"),
+            fz.Pitch("E+_0"),
+            fz.Pitch("E_0"),
+            fz.Pitch("F-_0"),
+            fz.Pitch("C_1"),
+            fz.Pitch("B+_0"),
+            fz.Pitch("B_0"),
+            fz.Pitch("C-_1"),
+        )
+        i_clef = Clef(i_staff).setHpos(0.5)
+
+        def CreateNotesAndNames(notes: Iterable[fz.PitchBase]):
+            i_notes = Scale.fromNotation(
+                i_staff,
+                notes,
+                color=colorByAcci(),
+                buff=it.cycle((4, 7)),
+                acciSpaceRatio=0,
+            ).shiftHpos(12)
+            i_noteNames = Group(
+                *(NoteName(p.opitch, color=colorByAcci()) for p in notes)
+            )
+            for i_noteName, i_note in zip(i_noteNames, i_notes):
+                x = i_note.getPosition()[0]
+                y = i_staff.getPosition()[1]
+                i_noteName.setPosition((x - 0.25, y + 0.5, 0))
+            return i_notes, i_noteNames
+
+        i_notes, i_noteNames = CreateNotesAndNames(notes)
+        i_notes2, i_noteNames2 = CreateNotesAndNames(notes2)
+
+        self.play(FadeIn(i_keyboard), Create(i_staff.i_staffLines), FadeIn(i_clef))
+        for i_noteName, i_note in zip(i_noteNames, i_notes):
+            x = i_note.getPosition()[0]
+            y = i_staff.getPosition()[1]
+            i_noteName.setPosition((x - 0.25, y + 0.5, 0))
+        self.forward(1)
+        for (note1, note2), (i_note1, i_note2), (i_noteName1, i_noteName2) in zip(
+            it.batched(notes, 2), it.batched(i_notes, 2), it.batched(i_noteNames, 2)
+        ):
+            acciMarkColor = MARK_RED if note2.acci > 0 else MARK_GREEN
+            self.play_audio(midi2Audio(note1), delay=0.25)
+            self.play(
+                i_keyboard.keys[note1].anim.mark(),
+                Write(i_note1),
+                Write(i_noteName1),
+                duration=0.5,
+            )
+            self.forward(0.5)
+            self.play_audio(midi2Audio(note2), delay=0.25)
+            self.play(
+                i_keyboard.keys[note2].anim.mark(acciMarkColor),
+                Write(i_note2),
+                Write(i_noteName2),
+                duration=0.5,
+            )
+            self.forward(0.5)
+            self.play(Indicate(i_note2.i_acci, scale_factor=1.5), duration=0.75)
+            self.forward(1)
+            self.play(i_keyboard.anim.unmark(), duration=0.5)
+        self.play(FadeOut(Group(i_notes, i_noteNames)))
+        self.forward(0.5)
+        self.play(Write(i_notes2), Write(i_noteNames2))
+        self.play(
+            i_keyboard.keys[4, 11].anim.mark(MARK_GREEN),
+            i_keyboard.keys[5, 12].anim.mark(MARK_RED),
+            duration=0.5,
+        )
+        self.forward(2)
+
+
+class TL_KeySigAccis(Timeline):
+    CONFIG = Config(font=_textFont)
+
+    def construct(self):
+        i_noteNames = Group[NoteName]()
+        for i in range(-1, 6):
+            i_noteName = NoteName(
+                fz.OPitch.co5(i), fs=DEFAULT_FONT_SIZE * 2
+            ).setPosition((i, 0, 0))
+            i_noteNames.add(i_noteName)
+        i_noteNames.points.to_center()
+        i_upperArrow = (
+            Arrow(ORIGIN, RIGHT * i_noteNames.points.box.width, color=RED, buff=0)
+            .points.next_to(i_noteNames, UP, buff=0.25)
+            .r
+        )
+        i_lowerArrow = (
+            Arrow(ORIGIN, LEFT * i_noteNames.points.box.width, color=GREEN, buff=0)
+            .points.next_to(i_noteNames, DOWN, buff=0.25)
+            .r
+        )
+        i_sharp = (
+            MusicGlyph("accidentalSharp", font=_musicFont, sp=0.3)
+            .setPosition(i_upperArrow.points.get_start())
+            .points.next_to(i_upperArrow, LEFT, buff=0.25, coor_mask=RIGHT)
+            .r
+        )
+        i_flat = (
+            MusicGlyph("accidentalFlat", font=_musicFont, sp=0.3)
+            .setPosition(i_lowerArrow.points.get_start())
+            .points.next_to(i_lowerArrow, RIGHT, buff=0.25, coor_mask=RIGHT)
+            .r
+        )
+        self.play(Write(i_noteNames), duration=1)
+        self.forward(1)
+        self.play(Create(i_upperArrow), Write(i_sharp))
+        self.forward(1)
+        self.play(Create(i_lowerArrow), Write(i_flat))
+        self.forward(2)
+        i_staff = (
+            Staff(**_staffConfig, staffLength=48)
+            .points.to_center()
+            .shift(DOWN * 1.25)
+            .r
+        )
+        i_clef = Clef(i_staff).setHpos(0.5)
+        i_sharpKey = KeySig(i_staff, 7).setHpos(6)
+        i_flatKey = KeySig(i_staff, -7).setHpos(28)
+        self.play(
+            Group(
+                i_upperArrow, i_lowerArrow, i_sharp, i_flat, i_noteNames
+            ).anim.points.shift(UP * 1.25),
+            Create(i_staff.i_staffLines),
+            FadeIn(i_clef),
+        )
+        for i_key, order in zip((i_sharpKey, i_flatKey), (1, -1)):
+            color = RED if order > 0 else GREEN
+            self.play(Write(i_key))
+            self.forward(1)
+            self.play(
+                AnimGroup(
+                    *(
+                        AnimGroup(
+                            Indicate(i_acci, scale_factor=1.5),
+                            Indicate(
+                                i_noteNames[i if order > 0 else -i - 1],
+                                scale_factor=1.25,
+                                color=color,
+                            ),
+                            duration=1,
+                        )
+                        for i, i_acci in enumerate(i_key)
+                    ),
+                    lag_ratio=0.5,
+                ),
+            )
+            self.forward(1)
+        self.forward(2)
+        self.play(FadeOut(Group(i_sharpKey, i_flatKey)))
+
+        def animateFindKeySig(co5Order: int, inverse: bool = False):
+            tonic = fz.OPitch.co5(co5Order)
+            scale = fz.Scale(tonic, fz.Modes.MAJOR)
+            alteredPitch: fz.OPitch = scale[-1 if co5Order > 0 else 3]
+            if co5Order > 0:
+                alteredDegs = np.arange(6 - co5Order, 6) * 4 % 7
+                alterColor = RED
+                noteNameIdx = co5Order - 1
+            else:
+                alteredDegs = np.arange(-2 - co5Order, -2, -1) * 4 % 7
+                alterColor = GREEN
+                noteNameIdx = co5Order
+
+            i_tonic = Note.fromNotation(i_staff, tonic).setHpos(16)
+            i_altered = Note.fromNotation(
+                i_staff, alteredPitch, color=alterColor
+            ).setHpos(32)
+            i_alteredNoteName = i_noteNames[noteNameIdx]
+            i_alteredNoteNames = (
+                i_noteNames[:co5Order] if co5Order > 0 else i_noteNames[co5Order:]
+            )
+            i_keyName = (
+                MajorName(tonic)
+                .setPosition(i_staff.i_staffLines.points.box.get(UR))
+                .points.shift((-1, 0.4, 0))
+                .r
+            )
+            i_scale = Scale.fromNotation(
+                i_staff,
+                scale,
+                color=colorByAcci(),
+                buff=4,
+                acciSpaceRatio=0,
+                noteheadType=createScaleNoteheadType(),
+            ).shiftHpos(10)
+            i_scale2 = Scale(
+                i_staff,
+                np.arange(7) + (tonic.deg - 6),
+                buff=4,
+                acciSpaceRatio=0,
+                noteheadType=createScaleNoteheadType(),
+            ).shiftHpos(10)
+            i_scale3 = Scale(
+                i_staff,
+                np.arange(7) + (tonic.deg - 6),
+                buff=3,
+                acciSpaceRatio=0,
+                noteheadType=createScaleNoteheadType(),
+            ).shiftHpos(15)
+            i_keySig = KeySig(i_staff, co5Order).setHpos(4)
+            i_accis = Group(*(i_scale[int(deg)].i_acci for deg in alteredDegs))
+
+            for deg in alteredDegs:
+                for i_ in i_scale2, i_scale3:
+                    i_[int(deg)].i_notehead.color.set(alterColor)
+
+            if inverse:
+                self.play(Write(i_keySig))
+                i_whatKey = (
+                    Text("?? 调")
+                    .points.next_to(i_keySig, UP, buff=0.25)
+                    .r.fill.set(YELLOW)
+                    .r
+                )
+                self.prepare(FadeOut(i_whatKey, duration=0.5), at=1.5)
+                self.play(
+                    ShowPassingFlashAround(i_keySig, time_width=5),
+                    FadeIn(i_whatKey, duration=0.5),
+                    duration=2,
+                )
+                self.forward(1)
+                i_altered.setHpos(36)
+                i_tonic.setHpos(20)
+                self.play(Indicate(i_keySig[-1], scale_factor=1.5))
+                self.play(
+                    # FadeOut(i_keySig),
+                    FadeIn(i_altered),
+                    i_alteredNoteName.anim.fill.set(color=alterColor),
+                )
+                self.forward(1)
+                self.play(
+                    Transform(i_altered, i_tonic, hide_src=False), FadeIn(i_keyName)
+                )
+                self.forward(1)
+                self.play(
+                    FadeOut(Group(i_altered, i_tonic), duration=0.5),
+                    Write(i_scale3, duration=1),
+                    *(i_.anim.fill.set(alterColor) for i_ in i_alteredNoteNames),
+                )
+                self.play(
+                    ShowPassingFlashAround(
+                        i_alteredNoteNames,
+                        time_width=5,
+                    ),
+                    duration=2,
+                )
+                self.forward(1)
+                self.play(
+                    *(Transform(i_s, i_t) for i_s, i_t in zip(i_keySig, i_accis)),
+                    Transform(i_scale3, i_scale2),
+                )
+                self.hide(i_scale2)
+                self.show(i_scale)
+                self.forward(2)
+                self.play(
+                    FadeOut(Group(i_scale, i_keyName)),
+                    *(
+                        i_noteName.anim.fill.set(color=WHITE)
+                        for i_noteName in i_noteNames
+                    ),
+                )
+            else:
+                self.play(FadeIn(Group(i_tonic, i_keyName)), duration=0.5)
+                self.forward(1)
+                self.play(Transform(i_tonic, i_altered, hide_src=False))
+                self.play(
+                    Indicate(i_altered.i_acci, scale_factor=1.5),
+                    i_alteredNoteName.anim.fill.set(color=alterColor),
+                )
+                self.forward(1)
+                self.play(
+                    FadeOut(Group(i_tonic, i_altered)),
+                    i_alteredNoteName.anim.fill.set(color=WHITE),
+                )
+                self.play(Write(i_scale))
+                self.hide(i_scale)
+                self.show(i_scale2)
+                self.play(
+                    *(Transform(i_s, i_t) for i_s, i_t in zip(i_accis, i_keySig)),
+                    Transform(i_scale2, i_scale3),
+                )
+                self.play(
+                    AnimGroup(
+                        *(
+                            AnimGroup(
+                                Indicate(i_acci, scale_factor=1.5, duration=0.5),
+                                i_noteName.anim(duration=0.5).fill.set(
+                                    color=alterColor
+                                ),
+                            )
+                            for i_acci, i_noteName in zip(
+                                i_keySig,
+                                i_noteNames if co5Order > 0 else reversed(i_noteNames),
+                            )
+                        ),
+                        lag_ratio=0.5,
+                    )
+                )
+
+                self.play(
+                    ShowPassingFlashAround(
+                        i_alteredNoteNames,
+                        time_width=5,
+                    ),
+                    ShowPassingFlashAround(i_keySig, time_width=5),
+                    duration=2,
+                )
+                self.forward(2)
+                self.play(
+                    FadeOut(Group(i_scale3, i_keySig, i_keyName)),
+                    *(
+                        i_noteName.anim.fill.set(color=WHITE)
+                        for i_noteName in i_noteNames
+                    ),
+                )
+
+        animateFindKeySig(4)
+        animateFindKeySig(2)
+        animateFindKeySig(5, True)
+        # animateFindKeySig(-2)
+        # animateFindKeySig(-4)
+        self.forward(2)
+
+
 class TL_Test(Timeline):
     def construct(self):
         i_text = TypstMath("hat(1)")(VItem)

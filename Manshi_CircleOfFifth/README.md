@@ -1,0 +1,1 @@
+此项目是与漫士老师合作的“数学 &times; 音乐·五度圈”一期视频 ([`BV1fKXhY9ET7`](https://www.bilibili.com/video/BV1fKXhY9ET7)) 的部分动画片段。由于该项目起初是在 Manim 上制作的，后期迁移到 JAnim, 所以目录下的 `scene.janim.py` 文件只包含了后期新增片段。 Manim 部分的片段见 `FXPsManimProjects` 仓库下的 [`CircleOfFifth`](https://github.com/vanleefxp/FXPsManimProjects/tree/main/CircleOfFifth) 子目录。
