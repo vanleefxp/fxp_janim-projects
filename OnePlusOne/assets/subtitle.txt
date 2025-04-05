@@ -1,0 +1,92 @@
+你是否在为忘记如何计算 1 + 1 而苦恼？
+Have you ever faced with the dilemma that you have forgotten how to calculate one plus one? 
+
+你并非孤身一人。
+You're not alone. 
+
+我相信每一位读者都或多或少被这道极其复杂的问题所困扰。
+I believe that every reader has been puzzled by this extremely confusing problem. 
+
+然而，通过严格的数学推理，
+However, under the strict deduction of mathematics, 
+
+我们可以轻松地解开这道难题。
+we may have the chance to tackle this difficult problem at ease.
+
+在解决数学问题之前，我们要先理清概念。
+Getting clear of the definitions is crucial to solving a mathematic problem. 
+
+对于计算 1 + 1 而言，其中涉及到的关键概念包括：
+For the calculation of one plus one, the key concepts involved are: 
+
+什么是 1, 以及什么是加法
+what is "one", and what is "plus". 
+
+为了回答这两个问题，我们需要引入皮亚诺公理系统
+To answer these two questions, we have to introduce Peano axioms, 
+
+及其对算术运算的定义。
+which construct the fundamental framework of natural numbers, 
+
+这一公理系统构建了自然数概念的基本框架。
+and its definition of arithmetic computations.
+
+皮亚诺公理首先声明存在一个自然数叫作 0
+Peano axiom states that we have a natural number called "zero", 
+
+又声明了一个函数 $S$ 表示一个自然数的后继
+and there is a function $S$ denoting the _successor_ of each natural number. 
+
+每个自然数都有后继且 0 不是任何自然数的后继
+Every natural number has a successor while 0 is not the successor of any other. 
+
+通常，我们将 0 的后继称为 1, 
+Typically, the successor of "zero" is referred to as "one", 
+
+1 的后继称为 2.
+and the successor of "one" is called "two".
+
+皮亚诺算术系统基于以下两条规则递归地定义了加法：
+Addition in Peano arithmetic system is defined recursively by the following two rules: 
+
+任何自然数加 0 等于其自身，
+adding zero to any natural number results in itself, 
+
+以及自然数 $m$ 加上 $n$ 的后继 $S(n)$ 
+and adding a natural number $n$'s successor to another natural number $m$ 
+
+等于 $(m + n)$ 的后继 $S(m + n)$.
+results in the succession of $(m + n)$. 
+
+记住了上面这些规则，我们就可以开始着手计算 1 + 1 了
+With these rules in mind, we can not get down to the calculation of one plus one.
+
+首先，我们知道 1 被定义为 0 的后继。
+First, recall that one is defined to be the successor of zero. 
+
+因此，我们可以把 1 + 1 写作 $S(0) + S(0)$
+Therefore, we can denote $1 + 1$ as $S(0) + S(0)$. 
+
+接下来，根据加法的递归定义 $S(0) + S(0)$ 应等于 $S(S(0) + 0)$
+Then, by the recursive definition of addition, $S(0) + S(0)$ equals to $S(S(0) + 0)$. 
+
+然后，根据递归定义的第一条规则，
+Afterwards, by the first statement of the recursive definition, 
+
+任何自然数加上 0 等于其自身，
+adding zero to any natural number results in itself, 
+
+因此 $S(0) + 0$ 就等于 $S(0)$
+so $S(0) + 0$ simply equals to $S(0)$. 
+
+最终我们得到 $1 + 1 = S(S(0))$
+Finally we come to realize that one plus one equals to $S(S(0))$, 
+
+也就是 2.
+which is --- by definition --- two.
+
+哇！至此我们已经成功解决了这道世纪难题！
+Wow! Up till now we have successfully conquered the century-old computational challenge. 
+
+真的是太棒啦！
+So great that we did it!
