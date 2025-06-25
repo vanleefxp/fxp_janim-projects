@@ -123,7 +123,7 @@ def _loadSmufl():
     _smuflName2Codepoint = pyr.pmap(
         {k: chr(int(v["codepoint"][2:], base=16)) for k, v in jsonSrc.items()}
     )
-    _loadSmufl = lambda: None
+    _loadSmufl = lambda: None  # noqa: E731
 
 
 def _sepDict(d1: Mapping, d2: Mapping):
@@ -489,7 +489,7 @@ class Note(Chord):
         acci = p.acci
         if not showNatural and acci == 0:
             acci = None
-        i_note = cls(parent, p.deg + cVpos, acci=acci, **kwargs)
+        i_note = cls(parent, p.step + cVpos, acci=acci, **kwargs)
         if callable(color):
             color = color(p)
         if color is not None:
@@ -537,10 +537,10 @@ class Scale(StaffElement[Note]):
         **kwargs,
     ):
         if isinstance(scale, fz.Scale):
-            tonicDeg = scale.tonic.deg
-            vpos = (tonicDeg + p.deg + cVpos for p in scale.mode)
+            tonicDeg = scale.tonic.step
+            vpos = (tonicDeg + p.step + cVpos for p in scale.mode)
         else:
-            vpos = (p.deg + cVpos for p in scale)
+            vpos = (p.step + cVpos for p in scale)
         accis = ((None if p.acci == 0 else p.acci) for p in scale)
         i_scale = cls(parent, vpos, accis=accis, **kwargs)
         if color is not None:
@@ -612,7 +612,7 @@ class Staff(Group, PositionedVItem):
 
         cfg = self._staffConfig = pyr.pmap(self._staffConfig)
         sp = self._sp = cfg["staffHeight"] / 4
-        l = cfg["staffLength"]
+        l = cfg["staffLength"]  # noqa: E741
         th = cfg["staffLineThickness"]
 
         self._i_staffLines = Group()

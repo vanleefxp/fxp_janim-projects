@@ -37,7 +37,7 @@ def _loadSmufl():
     _smuflName2Codepoint = pyr.pmap(
         {k: chr(int(v["codepoint"][2:], base=16)) for k, v in jsonSrc.items()}
     )
-    _loadSmufl = lambda: None
+    _loadSmufl = lambda: None  # noqa: E731
 
 
 def _collectFonts(
@@ -134,7 +134,7 @@ class NoteName(Group[Text | TextChar], PositionedVItem):
     ):
         super().__init__(**kwargs)
         i_degName = self._i_degName = Text(
-            fz.DEG_NAMES[pitch.opitch.deg],
+            fz.STEP_NAMES[pitch.opitch.step],
             font=font,
             font_size=fs,
             format=Text.Format.RichText,

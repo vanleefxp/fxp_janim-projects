@@ -1,29 +1,67 @@
 from collections.abc import Iterable
+from typing import TYPE_CHECKING, overload
 
 import numpy as np
 
+if TYPE_CHECKING:
+    from typing import Literal
 
-def nextPowerOf2(n: int) -> int:
+    @overload
+    def nextPow2(n: int, strict: bool, withPow: Literal[True]) -> tuple[int, int]: ...
+
+    @overload
+    def nextPow2(n: int, strict: bool, withPow: Literal[False]) -> int: ...
+
+    @overload
+    def prevPow2(n: int, strict: bool, withPow: Literal[True]) -> tuple[int, int]: ...
+
+    @overload
+    def prevPow2(n: int, strict: bool, withPow: Literal[False]) -> int: ...
+
+
+def nextPow2(
+    n: int, strict: bool = True, withPow: bool = False
+) -> tuple[int, int] | int:
     if n <= 0:
         return 1
     result = 1
     power = 0
-    while result < n:
-        result <<= 1
-        power += 1
-    return result, power
+    if strict:
+        while result <= n:
+            result <<= 1
+            power += 1
+    else:
+        while result < n:
+            result <<= 1
+            power += 1
+    if withPow:
+        return result, power
+    else:
+        return result
 
 
-def prevPowerOf2(n: int) -> int:
-    result, power = nextPowerOf2(n)
-    result >>= 1
-    power -= 1
-    return result, power
+def prevPow2(
+    n: int, strict: bool = True, withPow: bool = False
+) -> int | tuple[int, int]:
+    result, power = nextPow2(n, False)
+    if strict:
+        while result >= n:
+            result >>= 1
+            power -= 1
+    else:
+        while result > n:
+            result >>= 1
+            power -= 1
+    if withPow:
+        return result, power
+    else:
+        return result
 
 
 def gnext(n: float, k: float, rem: float = 0, strict: bool = True) -> float:
     """
-    Returns the smallest integer multiple of `k` greater than `n`.
+    Returns the smallest number in the form of `k * t + r` greater than `n` where `t` is an
+    integer.
     """
     if n % k == rem:
         return n + k if strict else n
@@ -32,7 +70,7 @@ def gnext(n: float, k: float, rem: float = 0, strict: bool = True) -> float:
 
 def gprev(n: float, k: float, rem: float = 0, strict: bool = True) -> float:
     """
-    Returns the largest integer multiple of `k` less than `n`.
+    Returns the largest number in the form of `k * t + r` less than `n` where `t` is an integer.
     """
     if n % k == rem:
         return n - k if strict else n

@@ -19,7 +19,7 @@ class TL_OnePlusOne(Timeline):
         )
         #show raw: set text(font: ("Fira Code", "Maple Mono NF"))
         #show math.equation: set text(font: "Fira Math", weight: 400)
-        #set par(leading: 1em, spacing: 1em)
+        #set par(leading: 1em, spacing: 1.5em, justify: true)
         """,
     )
 
@@ -30,23 +30,24 @@ class TL_OnePlusOne(Timeline):
 
         i_title = Title("观前提醒", font_size=48)
         i_reminder = (
-            TypstDoc(
-                "本视频为整活向，并非严肃的数学科普视频。 \\ \n"
-                "视频中提到的数学概念可能在介绍上存在不严谨之处，请注意甄别。#v(1em)\n\n"
-                "*灵感来源*: \n\n"
-                "- `BV1aV411N7kF` 视频中英语试卷的阅读 A 篇 \n"
-                "- Up 主 `@牧羊的瓦格纳` 制作的“成为人类”系列视频 #v(1em)\n\n"
-                "*特别鸣谢*: \n\n"
-                "- JAnim 动画引擎及其开发者 `@jkjkil-jiang` \n"
-                "- 部分插图来自于 `svgrepo.com` 上的免费素材"
-            )
+            TypstDoc((DIR / "assets/reminder_zh.typ").read_text(encoding="utf-8"))
             .points.to_center()
-            .shift(DOWN * 0.5)
+            .shift(DOWN * 0.6)
+            .r
+        )
+        i_title_en = Title("Friendly Reminder", font_size=48, underline_width=13.5)
+        i_reminder_en = (
+            TypstDoc((DIR / "assets/reminder_en.typ").read_text(encoding="utf-8"))
+            .points.to_center()
+            .shift(DOWN * 0.6)
             .r
         )
         self.play(Write(i_title), FadeIn(i_reminder))
-        self.forward(2)
+        self.forward(1.5)
         self.play(FadeOut(Group(i_title, i_reminder)), duration=0.5)
+        self.play(Write(i_title_en, duration=1), FadeIn(i_reminder_en))
+        self.forward(1.5)
+        self.play(FadeOut(Group(i_title_en, i_reminder_en)), duration=0.5)
         self.forward(1)
 
         # 引言
@@ -128,7 +129,7 @@ class TL_OnePlusOne(Timeline):
             **subtitleConfig,
             duration=3.75,
         )
-        self.forward(6)
+        self.forward(5)
         self.play(FadeOut(Group(i_presentation, i_1plus1Process)), duration=0.5)
 
         # 理清概念
@@ -185,7 +186,7 @@ class TL_OnePlusOne(Timeline):
         self.prepare(
             i_plus.anim.glow.set(color=YELLOW, alpha=0.5, size=0.75),
             FadeIn(i_questionMarksPlus),
-            at=1,
+            at=1.25,
         )
         self.forward(2.75)
 
@@ -207,9 +208,10 @@ class TL_OnePlusOne(Timeline):
         self.prepare(
             FadeOut(Group(i_questionMarksOne, i_questionMarksPlus, i_1plus1)),
             duration=0.5,
+            at=2,
         )
-        self.prepare(Write(i_title), at=0.5, duration=1)
-        self.prepare(Write(i_peano), at=1.5, duration=3)
+        self.prepare(Write(i_title), at=2.5, duration=1)
+        self.prepare(Write(i_peano), at=3.5, duration=3)
         self.forward(4.5)
 
         self.subtitle(
@@ -249,7 +251,7 @@ class TL_OnePlusOne(Timeline):
         self.subtitle(
             (
                 "皮亚诺公理首先声明存在一个自然数叫作 0, ",
-                "Peano axiom states that we have a natural number called “zero”, ",
+                "Peano axioms state that we have a natural number called “zero”, ",
             ),
             **subtitleConfig,
             duration=3.5,
@@ -282,9 +284,9 @@ class TL_OnePlusOne(Timeline):
             use_typst_text=True,
             duration=5.25,
         )
-        self.prepare(ShowPassingFlashAround(i_peano6, time_width=3), duration=2)
+        self.prepare(ShowPassingFlashAround(i_peano6, time_width=5), duration=3)
         self.prepare(
-            ShowPassingFlashAround(i_peano8, time_width=3), duration=2, at=2.75
+            ShowPassingFlashAround(i_peano8, time_width=5), duration=3, at=2.75
         )
         self.forward(5.5)
 
@@ -412,7 +414,6 @@ class TL_OnePlusOne(Timeline):
             ),
             **subtitleConfig,
             duration=5,
-            use_typst_text=True,
         )
         self.prepare(Write(i_title))
         self.forward(7)
@@ -426,7 +427,6 @@ class TL_OnePlusOne(Timeline):
             **subtitleConfig,
             duration=4.75,
             delay=-0.5,
-            use_typst_text=True,
         )
         self.prepare(Write(i_oneIsS0))
         self.forward(4.5)
@@ -442,7 +442,7 @@ class TL_OnePlusOne(Timeline):
         )
         self.prepare(FadeOut(i_oneIsS0), duration=0.5)
         self.prepare(FadeIn(i_calc, scale=0.75), at=0.5)
-        self.prepare(Write(i_1plus1Process[:4]), at=0.5)
+        self.prepare(Write(i_1plus1Process[:4]), at=1.5)
         self.prepare(
             Transform(
                 i_1plus1Process[0],
@@ -464,7 +464,7 @@ class TL_OnePlusOne(Timeline):
                 flatten=True,
                 path_arc=-PI / 2,
             ),
-            at=1.5,
+            at=3.5,
         )
         self.forward(5.5)
 
@@ -483,6 +483,7 @@ class TL_OnePlusOne(Timeline):
             Transform(i_1plus1Process[8], i_1plus1Process[20], hide_src=False),
             Transform(i_1plus1Process[11], i_1plus1Process[21], hide_src=False),
             FadeIn(Group(*i_1plus1Process[14:16], i_1plus1Process[22])),
+            at=5,
         )
         self.forward(8)
 
@@ -516,9 +517,11 @@ class TL_OnePlusOne(Timeline):
             use_typst_text=True,
         )
         self.prepare(
-            Transform(i_1plus1Process[13:16], i_1plus1Process[23:26], hide_src=False),
-            Transform(i_1plus1Process[22], i_1plus1Process[30], hide_src=False),
+            ShowPassingFlashAround(i_1plus1Process[16:22], time_width=5), duration=4
+        )
+        self.prepare(
             Transform(i_1plus1Process[16:22], i_1plus1Process[26:30], hide_src=False),
+            at=2.5,
         )
         self.forward(4)
 
@@ -531,6 +534,11 @@ class TL_OnePlusOne(Timeline):
             duration=4.45,
             use_typst_text=True,
         )
+        self.prepare(
+            Transform(i_1plus1Process[13:16], i_1plus1Process[23:26], hide_src=False),
+            Transform(i_1plus1Process[22], i_1plus1Process[30], hide_src=False),
+            at=1,
+        )
         self.forward(4.6)
 
         self.subtitle(
@@ -540,7 +548,6 @@ class TL_OnePlusOne(Timeline):
             ),
             **subtitleConfig,
             duration=3,
-            use_typst_text=True,
         )
         self.prepare(
             Transform(i_1plus1Process[23], i_1plus1Process[31], hide_src=False),
@@ -550,9 +557,10 @@ class TL_OnePlusOne(Timeline):
                 hide_src=False,
                 flatten=True,
             ),
+            at=0.5,
         )
         self.prepare(
-            i_1plus1Process[-1].anim.glow.set(color=YELLOW, alpha=0.5, size=0.5), at=1
+            i_1plus1Process[-1].anim.glow.set(color=YELLOW, alpha=0.5, size=0.5), at=1.5
         )
         self.forward(4)
 

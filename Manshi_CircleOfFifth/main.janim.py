@@ -22,10 +22,10 @@ class Text(Text):
 
 DIR = Path(__file__).parent if "__file__" in locals() else Path.cwd()
 sys.path.append(str((DIR / "..").resolve()))
-from public.items.music import *
-from public.items.coord import *
-from public.utils.number_theory_utils import modShift
-from public.sound import midi2Audio
+from public.items.music import *  # noqa: E402
+from public.items.coord import *  # noqa: E402
+from public.utils.number_theory_utils import modShift  # noqa: E402
+from public.sound import midi2Audio  # noqa: E402
 
 
 _staffConfig = pyr.m(
@@ -68,7 +68,8 @@ class MajorName(Group[NoteName | Text], PositionedVItem):
         return self.i_noteName.getPosition()
 
 
-createScaleNoteheadType = lambda: it.chain(("whole",), it.repeat("black"))
+def createScaleNoteheadType():
+    return it.chain(("whole",), it.repeat("black"))
 
 
 class TL_StaffTest(Timeline):
@@ -262,7 +263,7 @@ class TL_Co5Intro(Timeline):
             i_note = i_scale[i]
             i_noteName = i_scaleText[i]
             i_deg = (
-                TypstMath(f"hat({i+1})")(VItem)
+                TypstMath(f"hat({i + 1})")(VItem)
                 .set_stroke_background(True)
                 .points.scale(1.25)
                 .r.fill.set(color=WHITE, alpha=1)
@@ -290,7 +291,7 @@ class TL_Co5Intro(Timeline):
                 ShowPassingFlash(i_arc, time_width=3, duration=1),
             )
 
-        i_degsCo5 = Group[TypstMath](*(i_degs[int(deg)] for deg in fz.DEGS_CO5))
+        i_degsCo5 = Group[TypstMath](*(i_degs[int(deg)] for deg in fz.STEPS_CO5))
         self.forward(2)
 
         currentTone = 0
@@ -320,7 +321,7 @@ class TL_Co5Intro(Timeline):
             tone = newTonic.tone
             diff = modShift(tone - currentTone, 12, 6)
             rotation = i_circ.n2a(diff, diff=True)
-            vpos = np.arange(7) + (newTonic.deg - 6)
+            vpos = np.arange(7) + (newTonic.step - 6)
             i_newScale = Scale.fromNotation(
                 i_staff,
                 newScale,
@@ -541,7 +542,7 @@ class TL_Co5Intro(Timeline):
         )
 
         # 出示五度圈的前 5 个音，构成大调五声音阶
-        pentatonicDegsCo5 = fz.DEGS_CO5[1:6]
+        pentatonicDegsCo5 = fz.STEPS_CO5[1:6]
         pentatonicDegs = np.sort(pentatonicDegsCo5)
         pentatonicTones = fz.MAJOR_SCALE_TONES[pentatonicDegs]
         pentatonicNames = ("宫", "商", "角", "徵", "羽")
@@ -555,11 +556,11 @@ class TL_Co5Intro(Timeline):
             )
         )
 
-        i_pentatonicDegs = Group(*(i_degs[int(deg)] for deg in pentatonicDegsCo5))
+        # i_pentatonicDegs = Group(*(i_degs[int(deg)] for deg in pentatonicDegsCo5))
         i_pentatonicLines = i_co5[1:5]
         i_nonPentatonicLines = Group(i_co5[0], i_co5[-1])
 
-        deg = fz.DEGS_CO5[1]
+        deg = fz.STEPS_CO5[1]
         tone = fz.MAJOR_SCALE_TONES_CO5[1]
         self.play_audio(midi2Audio(tone), delay=0.5)
         self.play(
@@ -578,7 +579,7 @@ class TL_Co5Intro(Timeline):
         i_pentatonicScaleText = Group(
             *(i_scaleText[int(deg)] for deg in pentatonicDegs)
         )
-        for i, deg in enumerate(fz.DEGS_CO5[2:6]):
+        for i, deg in enumerate(fz.STEPS_CO5[2:6]):
             tone = fz.MAJOR_SCALE_TONES_CO5[i + 2]
             self.play_audio(midi2Audio(tone), delay=0.5)
             self.play(
@@ -597,7 +598,12 @@ class TL_Co5Intro(Timeline):
         self.play(FadeIn(i_pentatonicNames))
 
         def animatePentatonicChange(co5Order: int, playScale: bool = True):
-            nonlocal i_scale, i_pentatonicScale, i_keyName, i_pentatonicScaleText, currentTone
+            nonlocal \
+                i_scale, \
+                i_pentatonicScale, \
+                i_keyName, \
+                i_pentatonicScaleText, \
+                currentTone
 
             newTonic = fz.OPitch.co5(co5Order)
             newScale = fz.Scale(newTonic, fz.Modes.MAJOR)
@@ -687,7 +693,7 @@ class TL_Co5Intro(Timeline):
         def animateNonPentatonic(hide: bool = False, succession: bool = True):
             ag = []
             for i in (0, -1):
-                deg = fz.DEGS_CO5[i]
+                deg = fz.STEPS_CO5[i]
                 tone = fz.MAJOR_SCALE_TONES_CO5[i]
                 i_line = i_co5[i]
 
@@ -769,18 +775,14 @@ class TL_MajorTriad(Timeline):
             i_noteName = (
                 # fmt: off
                 Text(notename)
-                .points
-                .move_to(mob_note.i_noteheads[0])
+                .points.move_to(mob_note.i_noteheads[0])
                 .next_to(i_staff2.i_staffLines, DOWN, buff=0.5, coor_mask=UP)
                 .r
                 # fmt: on
             )
             i_ratioNumber = (
                 # fmt: off
-                Text(str(ratioNumber))
-                .points
-                .next_to(i_noteName, DOWN, buff=0.25)
-                .r
+                Text(str(ratioNumber)).points.next_to(i_noteName, DOWN, buff=0.25).r
                 # fmt: on
             )
             self.play_audio(midi2Audio(notename), delay=0.25)
@@ -1045,14 +1047,14 @@ class TL_KeySigAccis(Timeline):
             ).shiftHpos(10)
             i_scale2 = Scale(
                 i_staff,
-                np.arange(7) + (tonic.deg - 6),
+                np.arange(7) + (tonic.step - 6),
                 buff=4,
                 acciSpaceRatio=0,
                 noteheadType=createScaleNoteheadType(),
             ).shiftHpos(10)
             i_scale3 = Scale(
                 i_staff,
-                np.arange(7) + (tonic.deg - 6),
+                np.arange(7) + (tonic.step - 6),
                 buff=3,
                 acciSpaceRatio=0,
                 noteheadType=createScaleNoteheadType(),
@@ -1180,15 +1182,6 @@ class TL_KeySigAccis(Timeline):
         # animateFindKeySig(-2)
         # animateFindKeySig(-4)
         self.forward(2)
-
-
-class TL_Test(Timeline):
-    def construct(self):
-        i_text = TypstMath("hat(1)")(VItem)
-        self.play(
-            GroupUpdater(i_text, lambda data, p: data.points.move_to((p.alpha, 0, 0))),
-            i_text.anim.fill.set(color=RED),
-        )
 
 
 if __name__ == "__main__":
