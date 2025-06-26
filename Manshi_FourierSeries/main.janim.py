@@ -1,39 +1,23 @@
 import math
-from functools import lru_cache  # , partial
+from functools import lru_cache, partial
 from collections.abc import Mapping
+from pathlib import Path
+from numbers import Rational
+from fractions import Fraction as Q
 
 from janim.imports import *
 import numpy as np
 from egcd import egcd
 import pyrsistent as pyr
 
+DIR = Path(__file__).parent if "__file__" in locals() else Path.cwd()
 arrowConfig = dict(center_anchor="front", body_length=0.15, back_width=0.15)
-
 config = Config(
     font=[
         "NewComputerModern10",
         "FandolSong",
     ],
-    typst_shared_preamble="""
-    #set text(
-        font: (
-            "New Computer Modern",
-            "FandolSong",
-        ),
-        lang: "zh",
-    )
-    // #show strong: set text(
-    //     font: (
-    //         "New Computer Modern",
-    //         "FandolHei"
-    //     )
-    // )
-    #set par(leading: 1em, spacing: 1.5em, justify: true)
-    #set table(
-        stroke: 0.5pt + white,
-        align: center + horizon,
-    )
-    """,
+    typst_shared_preamble=(DIR / "../assets/typst/manshi_preamble.typ").read_text(),
 )
 
 
@@ -152,7 +136,7 @@ _polynomialDefaultWidths = pyr.m(
     symbol=1,
     coef=0.4,
     term=0.4,
-    add=0.5,
+    sign=0.5,
     ellipsis=1,
 )
 
@@ -160,7 +144,7 @@ _polynomialDefaultAligns = pyr.m(
     coef=-1,
     term=-1,
     symbol=1,
-    add=0,
+    sign=0,
     ellipsis=-1,
     eq=0,
 )
@@ -184,22 +168,127 @@ def createEmptyItem() -> Dot:
 
 class MarkedTypstMath(TypstMath, MarkedItem):
     def __init__(self, text, *args, **kwargs) -> None:
+        # 在输入前面增加一个 ".", 用于确定文本基线的位置
         super().__init__(". " + text, *args, **kwargs)
         y0 = self[0].points.box.bottom[1]
-        self.remove(self[0])
+        self.remove(self[0])  # 移除增加的的点
         if len(self) > 0:
-            x0 = self[0].points.box.left[0]
+            x0 = self.points.box.left[0]
             self.mark.set_points(((x0, y0, 0),))
         else:
+            self.add(createEmptyItem())
             self.mark.set_points(((0, y0, 0),))
+        self.mark.set(ORIGIN)
+
+
+type Sgn = Literal[1, -1]
+
+
+class PolyTermOptBase(metaclass=ABCMeta):
+    @property
+    @abstractmethod
+    def sign(self) -> Sgn:
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def order(self) -> int:
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def coefSrc(self) -> str:
+        raise NotImplementedError
+
+    @property
+    def omit(self) -> bool:
+        return False
+
+
+class PolyTermOpt(PolyTermOptBase):
+    def __new__(cls, sign: Sgn, coefSrc: str, order: int, omit: bool = False) -> Self:
+        self = super().__new__(cls)
+        self._sign = sign
+        self._coefSrc = coefSrc
+        self._order = order
+        self._omit = omit
+        return self
+
+    @property
+    def sign(self) -> Sgn:
+        return self._sign
+
+    @property
+    def coefSrc(self) -> str:
+        return self._coefSrc
+
+    @property
+    def order(self) -> int:
+        return self._order
+
+    @property
+    def omit(self) -> bool:
+        return self._omit
+
+
+class NumberedPolyTermOpt(PolyTermOptBase):
+    def __new__(cls, order, symbol: str = "a") -> Self:
+        self = super().__new__(cls)
+        self._order = order
+        self._symbol = symbol
+        return self
+
+    @property
+    def symbol(self) -> str:
+        return self._symbol
+
+    @property
+    def order(self) -> int:
+        return self._order
+
+    @property
+    def sign(self) -> Sgn:
+        return 1
+
+    @property
+    def coefSrc(self) -> str:
+        return f"{self.symbol}_({self.order})"
+
+
+class RationalPolyTermOpt[N = Rational](PolyTermOptBase):
+    def __new__(cls, coef: N, order: int) -> Self:
+        self = super().__new__(cls)
+        self._coef = coef
+        self._order = order
+        return self
+
+    @property
+    def coef(self) -> N:
+        return self._coef
+
+    @property
+    def sign(self) -> Sgn:
+        return 1 if self.coef.numerator >= 0 else -1
+
+    @property
+    def order(self) -> int:
+        return self._order
+
+    @property
+    def coefSrc(self) -> str:
+        if self.order != 0 and abs(self.coef) == 1:
+            return ""  # 非常数项不写系数 1
+        return str(abs(self.coef))
+
+    @property
+    def omit(self) -> bool:
+        return self.coef == 0
 
 
 class PolynomialText(Group[VItem], MarkedItem):
     def __init__(
         self,
-        firstTerm: int = 0,
-        nTerms: int = 7,
-        coefFactory: Callable[[int], str] = _createPolynomialCoef,
+        terms: Iterable[PolyTermOptBase] | None = None,
         unknownSymbol: str = "x",
         nameSymbol: str = "f(x)",
         typstConfig: Mapping[str, Any] = pyr.m(),
@@ -209,39 +298,26 @@ class PolynomialText(Group[VItem], MarkedItem):
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
-        coefFactory = lru_cache(maxsize=None)(coefFactory)
+
+        if terms is None:
+            terms = (NumberedPolyTermOpt(i) for i in range(7))
         if widths is not _polynomialDefaultWidths:
             widths = _polynomialDefaultWidths | widths
         if aligns is not _polynomialDefaultAligns:
             aligns = _polynomialDefaultAligns | aligns
 
-        typstSrc = (
-            f"{nameSymbol} = "
-            + (
-                " + ".join(
-                    f"{coefFactory(i)} {createPolynomialTerm(i, unknownSymbol)}"
-                    for i in range(firstTerm, firstTerm + nTerms)
-                )
-            )
-            + " + ..."
-        )
-        i_polyText = TypstMath(typstSrc, **typstConfig)
-
-        start = 0
-        length = charCount(nameSymbol)
         # 多项式符号
         i_symbol = self._i_symbol = halign(
-            i_polyText[start : (start := start + length)],
+            MarkedTypstMath(nameSymbol, **typstConfig),
             -widths["eq"] - widths["symbol"],
             widths["symbol"],
             aligns["symbol"],
         )
         self.add(*i_symbol)
 
-        length = 1
         # 等号
         i_eq = self._i_eq = halign(
-            i_polyText[start : (start := start + length)],
+            MarkedTypstMath("=", **typstConfig),
             -widths["eq"],
             widths["eq"],
             aligns["eq"],
@@ -250,68 +326,81 @@ class PolynomialText(Group[VItem], MarkedItem):
 
         i_coefs = self._i_coefs = Group()  # 系数
         i_terms = self._i_terms = Group()  # 项
-        i_adds = self._i_adds = Group()  # 加号
+        i_signs = self._i_adds = Group()  # 加号
 
         pos = 0
-        for i in range(firstTerm, firstTerm + nTerms):
-            coefLength = charCount(coefFactory(i))
-            termLength = polyTermCharCount(i, unknownSymbol)
+        for i, termOpt in enumerate(terms):
+            omit = termOpt.omit
+            # 符号
+            i_signs.add(
+                i_sign := halign(
+                    MarkedTypstMath(
+                        ""
+                        if omit
+                        else "-"
+                        if termOpt.sign < 0
+                        else ""
+                        if i == 0
+                        else "+",
+                        **typstConfig,
+                    ),
+                    pos,
+                    widths["sign"],
+                    aligns["sign"],
+                )
+            )
+            pos += widths["sign"]
+            self.add(*i_sign)
 
             # 系数
-            length = coefLength
             i_coefs.add(
                 i_coef := halign(
-                    i_polyText[start : (start := start + length)]
-                    if length > 0
-                    else createEmptyItem(),
+                    MarkedTypstMath("" if omit else termOpt.coefSrc, **typstConfig),
                     pos,
                     widths["coef"],
                     aligns["coef"],
                 )
             )
             pos += widths["coef"]
-            if length > 0:
-                self.add(*i_coef)
-            else:
-                self.add(i_coef)
+            self.add(*i_coef)
 
             # 项
-            length = termLength
             i_terms.add(
                 i_term := halign(
-                    i_polyText[start : (start := start + length)]
-                    if length > 0
-                    else createEmptyItem(),
+                    MarkedTypstMath(
+                        ""
+                        if omit
+                        else createPolynomialTerm(termOpt.order, unknownSymbol),
+                        **typstConfig,
+                    ),
                     pos,
                     widths["term"],
                     aligns["term"],
                 )
             )
             pos += widths["term"]
-            if length > 0:
-                self.add(*i_term)
-            else:
-                self.add(i_term)
+            self.add(*i_term)
 
-            # 加号
-            length = 1
-            i_adds.add(
-                i_add := halign(
-                    i_polyText[start : (start := start + length)],
-                    pos,
-                    widths["add"],
-                    aligns["add"],
-                )
+        i_signs.add(
+            i_sign := halign(
+                MarkedTypstMath("+", **typstConfig),
+                pos,
+                widths["sign"],
+                aligns["sign"],
             )
-            pos += widths["add"]
-            self.add(*i_add)
+        )
+        pos += widths["sign"]
+        self.add(*i_sign)
 
         i_ellipsis = self._i_ellipsis = halign(
-            i_polyText[start:], pos, widths["ellipsis"], aligns["ellipsis"]
+            MarkedTypstMath("...", **typstConfig),
+            pos,
+            widths["ellipsis"],
+            aligns["ellipsis"],
         )
         self.add(*i_ellipsis)
 
-        self.mark.set_points((UP * i_ellipsis.points.box.bottom[1],))
+        self.mark.set_points((ORIGIN,))
 
     @property
     def i_symbol(self) -> VItem:
@@ -330,7 +419,7 @@ class PolynomialText(Group[VItem], MarkedItem):
         return self._i_terms
 
     @property
-    def i_adds(self) -> Group[VItem]:
+    def i_signs(self) -> Group[VItem]:
         return self._i_adds
 
     @property
@@ -747,12 +836,15 @@ class TL_Geometry(Timeline):
 class TL_CRT_3d(Timeline):
     CONFIG = config
 
-    def __init__(self, showUvecText=False, *args, **kwargs):
+    def __init__(self, showUvecText=False, fadeOut=True, *args, **kwargs):
         self._showUvecText = showUvecText
+        self._fadeOut = fadeOut
         super().__init__(*args, **kwargs)
 
     def construct(self):
         showUvecText = self._showUvecText
+        fadeOut = self._fadeOut
+
         self.camera.points.rotate(PI / 3, axis=RIGHT).rotate(PI / 3, axis=OUT).scale(
             1.25
         ).shift((-1, 1, 2.5))
@@ -849,13 +941,24 @@ class TL_CRT_3d(Timeline):
 
         def createCoordText(point) -> Text:
             return (
-                Text("(" + (", ".join(map(str, np.round(point).astype(int)))) + ")")
+                Text(
+                    f"({
+                        ', '.join(
+                            map(
+                                lambda x, c: f'<sc {c}><fc {c}>{x}</fc></sc>',
+                                np.round(point).astype(int),
+                                colors,
+                            )
+                        )
+                    })",
+                    format=Text.Format.RichText,
+                    stroke_alpha=1,
+                    stroke_radius=0.005,
+                    depth=-1,
+                )
                 .points.next_to(ORIGIN, UP, buff=0.1)
                 .rotate(PI / 4, axis=RIGHT, about_point=ORIGIN)
                 .shift(point)
-                .r.stroke.set(color=WHITE, alpha=1)
-                .r.radius.set(0.005)
-                .r.depth.set(-1)
                 .r
             )
 
@@ -920,7 +1023,8 @@ class TL_CRT_3d(Timeline):
             *(i_.anim.stroke.set(alpha=1).r.fill.set(alpha=1) for i_ in i_vecs),
         )
         self.forward(1)
-        self.play(*map(partial(FadeOut, root_only=True), self.visible_items()))
+        if fadeOut:
+            self.play(*map(partial(FadeOut, root_only=True), self.visible_items()))
 
 
 class TL_CRT_RemainderAdd(Timeline):
@@ -1181,23 +1285,24 @@ class TL_CRT(Timeline):
 
         # 展示 3D 向量示意图
 
-        i_tl = TL_CRT_3d().build().to_item(keep_last_frame=True).show()
+        i_tl = TL_CRT_3d().build().to_item().show()
         i_tlClipped = TransformableFrameClip(i_tl, offset=(0.15, 0.02))
+        self.prepare(
+            FadeOut(i_tl),
+            FadeOut(i_tlClipped),
+            FadeOut(i_modTexts),
+            FadeOut(i_countAsCoord),
+            at=i_tl.end - self.current_time - 1,
+            duration=1,
+        )
         self.show(i_tlClipped)
         self.forward_to(i_tl.end)
+        self.hide(i_tl, i_tlClipped)
 
         i_solText = (
             TypstMath(f"n equiv {sol_n} quad mod {sol_gcd}")
             .points.move_to((0, -2.75, 0))
             .r
-        )
-
-        self.forward(2)
-        self.play(
-            FadeOut(i_tl),
-            FadeOut(i_tlClipped),
-            FadeOut(i_modTexts),
-            FadeOut(i_countAsCoord),
         )
 
         def playTimeline(tl):
@@ -1312,7 +1417,12 @@ class TL_CRT(Timeline):
         self.forward(1)
         self.play(FadeOut(i_modTexts, duration=1))
 
-        i_tl = TL_CRT_3d(showUvecText=True).build().to_item(keep_last_frame=True).show()
+        i_tl = (
+            TL_CRT_3d(showUvecText=True, fadeOut=False)
+            .build()
+            .to_item(keep_last_frame=True)
+            .show()
+        )
         i_tlClipped = TransformableFrameClip(i_tl, offset=(0.25, 0.04))
         self.show(i_tlClipped)
         # self.play(i_text2.anim(duration=2).points.shift(LEFT * 1.8))
@@ -1325,27 +1435,81 @@ class TL_CRT(Timeline):
         self.forward(2)
 
 
+class TL_TalorSeries(Timeline):
+    def __init__(
+        self,
+        coefsFactory=lambda: it.cycle((1, -1)),
+        resultFn=lambda x: 1 / (x + 1),
+        resultGraphConfig=pyr.m(discontinuities=(-1,)),
+        maxDeg=7,
+        *args,
+        **kwargs,
+    ):
+        self._coefsFactory = coefsFactory
+        self._resultFn = resultFn
+        self._maxDeg = maxDeg
+        self._resultGraphConfig = resultGraphConfig
+        super().__init__(*args, **kwargs)
+
+    def construct(self):
+        coefsFactory = self._coefsFactory
+        resultFn = self._resultFn
+        maxDeg = self._maxDeg
+
+        i_coord = Axes(
+            num_sampled_graph_points_per_tick=5, axis_config=dict(tick_size=0.05)
+        )
+
+        self.show(i_coord)
+        # self.play(FadeIn(i_coord))
+        self.forward(2)
+
+        polys = tuple(
+            np.polynomial.Polynomial(tuple(it.islice(coefsFactory(), i + 1)))
+            for i in range(maxDeg)
+        )
+        i_resultGraph = i_coord.get_graph(
+            resultFn,
+            stroke_color=BLUE,
+            **self._resultGraphConfig,
+        )
+        i_polyGraph = i_coord.get_graph(polys[0], stroke_color=RED)
+        self.play(FadeIn(i_resultGraph))
+        self.play(Create(i_polyGraph))
+        for poly in polys[1:]:
+            self.play(
+                Transform(
+                    i_polyGraph,
+                    i_polyGraph := i_coord.get_graph(poly, stroke_color=RED),
+                ),
+                duration=1,
+            )
+            self.forward(0.5)
+
+
 class TL_Polynomial(Timeline):
     def construct(self):
         i_poly1 = (
             PolynomialText(
                 nameSymbol="1 / (x + 1)",
-                coefFactory=lambda i: "1" if i == 0 else "",
+                terms=(RationalPolyTermOpt(1 - (i % 2) * 2, i) for i in range(7)),
                 aligns=dict(coef=0),
             )
             .points.to_center()
-            .shift(UP * 2)
+            .shift(UP * 2.75)
             .r
         )
         i_poly2 = (
             PolynomialText(
                 nameSymbol='integral_0^x ("d"t) / (t + 1)',
-                firstTerm=1,
-                coefFactory=lambda i: "" if i == 1 else f"1 / {i}",
+                terms=(
+                    RationalPolyTermOpt(Q(1 - (i % 2) * 2, i + 1), i + 1)
+                    for i in range(7)
+                ),
                 aligns=dict(coef=0),
             )
             .mark.set(i_poly1.mark.get())
-            .r.points.shift(DOWN * 1.5)
+            .r.points.shift(DOWN * 1.25)
             .r
         )
         i_poly2NewSymbol = (
@@ -1362,23 +1526,58 @@ class TL_Polynomial(Timeline):
             .r
         )
 
+        i_tl1 = (
+            TL_TalorSeries(
+                coefsFactory=lambda: it.cycle((1, -1)),
+                resultFn=lambda x: 1 / (x + 1),
+                resultGraphConfig=pyr.m(discontinuities=(-1,)),
+                maxDeg=7,
+            )
+            .build()
+            .to_item(keep_last_frame=True)
+        )
+        i_tl1Clipped = TransformableFrameClip(
+            i_tl1, offset=(-0.225, -0.375), clip=(0.35, 0.1, 0.35, 0.45)
+        )
+
+        i_tl2 = (
+            TL_TalorSeries(
+                coefsFactory=lambda: it.chain(
+                    (0,), ((-1 if i % 2 == 0 else 1) / i for i in it.count(1))
+                ),
+                resultFn=lambda x: np.log(x + 1),
+                resultGraphConfig=pyr.m(x_range=(-0.99, 8)),
+                maxDeg=8,
+            )
+            .build()
+            .to_item(keep_last_frame=True)
+        )
+        i_tl2Clipped = TransformableFrameClip(
+            i_tl2, offset=(0.125, -0.275), clip=(0.45, 0.2, 0.25, 0.35)
+        )
+
+        self.show(i_tl1, i_tl2, i_tl1Clipped, i_tl2Clipped)
+
         self.play(Write(i_poly1))
         self.forward(1)
         self.play(
-            Transform(i_poly1.i_symbol, i_poly2.i_symbol, hide_src=False),
+            *(FadeIn(i_poly2.i_symbol[i]) for i in (0, 2, 3, 4, 5)),
+            Transform(i_poly1.i_symbol[2:5], i_poly2.i_symbol[6:9], hide_src=False),
+            Transform(i_poly1.i_symbol[1], i_poly2.i_symbol[1], hide_src=False),
             Transform(i_poly1.i_eq, i_poly2.i_eq, hide_src=False),
         )
 
         self.forward(1)
-        for i_coef1, i_term1, i_add1, i_coef2, i_term2, i_add2 in zip(
+        for i_coef1, i_term1, i_sign1, i_coef2, i_term2, i_sign2 in zip(
             i_poly1.i_coefs,
             i_poly1.i_terms,
-            i_poly1.i_adds,
+            i_poly1.i_signs,
             i_poly2.i_coefs,
             i_poly2.i_terms,
-            i_poly2.i_adds,
+            i_poly2.i_signs,
         ):
             self.play(
+                Transform(i_sign1, i_sign2, hide_src=False, flatten=True),
                 Transform(i_coef1, i_coef2, hide_src=False, flatten=True),
                 Transform(i_term1, i_term2, hide_src=False, flatten=True),
                 duration=0.5,
@@ -1386,8 +1585,9 @@ class TL_Polynomial(Timeline):
             self.forward(0.5)
 
         self.play(
-            Transform(i_poly1.i_adds, i_poly2.i_adds, hide_src=False),
+            Transform(i_poly1.i_signs[-1], i_poly2.i_signs[-1], hide_src=False),
             Transform(i_poly1.i_ellipsis, i_poly2.i_ellipsis, hide_src=False),
+            duration=0.5,
         )
         self.forward(1)
         self.play(Transform(i_poly2.i_symbol, i_poly2NewSymbol))
