@@ -1435,13 +1435,19 @@ class TL_CRT(Timeline):
         self.forward(2)
 
 
-class TL_TalorSeries(Timeline):
+class TL_Talor_Diagram(Timeline):
+    _defaultPauses = pyr.m(start=0, beforeShowPoly=1)
+
     def __init__(
         self,
         coefsFactory=lambda: it.cycle((1, -1)),
         resultFn=lambda x: 1 / (x + 1),
-        resultGraphConfig=pyr.m(discontinuities=(-1,)),
+        resultGraphConfig=pyr.m(x_range=(-0.8, 5)),
         maxDeg=7,
+        cropRadius=(2, 1.5),
+        coordShift=(-0.5, -1),
+        pauses=_defaultPauses,
+        showResultFirst=True,
         *args,
         **kwargs,
     ):
@@ -1449,20 +1455,32 @@ class TL_TalorSeries(Timeline):
         self._resultFn = resultFn
         self._maxDeg = maxDeg
         self._resultGraphConfig = resultGraphConfig
+        self._cropRadius = cropRadius
+        self._coordShift = coordShift
+        self._pauses = dict(self._defaultPauses)
+        self._pauses.update(pauses)
+        self.showResultFirst = showResultFirst
         super().__init__(*args, **kwargs)
 
     def construct(self):
         coefsFactory = self._coefsFactory
         resultFn = self._resultFn
         maxDeg = self._maxDeg
+        cropRadius = self._cropRadius
+        coordShift = self._coordShift
+        pauses = self._pauses
+        showResultFirst = self.showResultFirst
 
-        i_coord = Axes(
-            num_sampled_graph_points_per_tick=5, axis_config=dict(tick_size=0.05)
+        i_coord = (
+            Axes(num_sampled_graph_points_per_tick=5, axis_config=dict(tick_size=0.05))
+            .points.shift((*coordShift, 0))
+            .r
         )
-
-        self.show(i_coord)
-        # self.play(FadeIn(i_coord))
-        self.forward(2)
+        i_cropRect = Rect(
+            *np.array(cropRadius) * 2, stroke_radius=0.03, stroke_color=WHITE
+        )
+        self.forward(pauses["start"])
+        self.play(FadeIn(Group(i_cropRect, i_coord)))
 
         polys = tuple(
             np.polynomial.Polynomial(tuple(it.islice(coefsFactory(), i + 1)))
@@ -1470,24 +1488,48 @@ class TL_TalorSeries(Timeline):
         )
         i_resultGraph = i_coord.get_graph(
             resultFn,
-            stroke_color=BLUE,
+            stroke_color=WHITE,
+            stroke_alpha=0.5,
             **self._resultGraphConfig,
         )
-        i_polyGraph = i_coord.get_graph(polys[0], stroke_color=RED)
-        self.play(FadeIn(i_resultGraph))
-        self.play(Create(i_polyGraph))
+        polyXRange = (
+            i_coord.p2c((-cropRadius[0], 0, 0))[0],
+            i_coord.p2c((cropRadius[0], 0, 0))[0],
+        )
+        i_polyGraph = i_coord.get_graph(polys[0], stroke_color=RED, x_range=polyXRange)
+
+        if showResultFirst:
+            self.play(Create(i_resultGraph), duration=1)
+            self.forward(pauses["beforeShowPoly"])
+
+        self.play(Create(i_polyGraph), duration=1)
+        self.forward(0.5)
         for poly in polys[1:]:
             self.play(
                 Transform(
                     i_polyGraph,
-                    i_polyGraph := i_coord.get_graph(poly, stroke_color=RED),
+                    i_polyGraph := i_coord.get_graph(
+                        poly, stroke_color=RED, x_range=polyXRange
+                    ),
                 ),
                 duration=1,
             )
             self.forward(0.5)
 
+        if not showResultFirst:
+            self.play(Create(i_resultGraph), duration=1)
 
-class TL_Polynomial(Timeline):
+    @property
+    def cropParams(self) -> tuple[float, float, float, float]:
+        crx, cry = self._cropRadius
+        rx, ry = self.config_getter.frame_x_radius, self.config_getter.frame_y_radius
+        print(crx, cry, rx, ry)
+        cropX, cropY = (rx - crx) / rx / 2, (ry - cry) / ry / 2
+        print(cropX, cropY)
+        return (cropX, cropY, cropX, cropY)
+
+
+class TL_Talor(Timeline):
     def construct(self):
         i_poly1 = (
             PolynomialText(
@@ -1496,7 +1538,7 @@ class TL_Polynomial(Timeline):
                 aligns=dict(coef=0),
             )
             .points.to_center()
-            .shift(UP * 2.75)
+            .shift(UP * 3)
             .r
         )
         i_poly2 = (
@@ -1517,48 +1559,78 @@ class TL_Polynomial(Timeline):
         )
         i_integral = (
             TypstMath('integral_0^x ("d" t) / (t + 1) = ln(x + 1)')
-            .points.shift((-2.5, -2, 0))
+            .points.shift(DOWN * 0.25)
             .r
         )
         i_deriv = (
             TypstMath('("d") / ("d" x) ln(x + 1) = 1 / (x + 1)')
-            .points.shift((2.5, -2, 0))
+            .points.shift(DOWN * 2.25)
             .r
         )
 
-        i_tl1 = (
-            TL_TalorSeries(
-                coefsFactory=lambda: it.cycle((1, -1)),
-                resultFn=lambda x: 1 / (x + 1),
-                resultGraphConfig=pyr.m(discontinuities=(-1,)),
-                maxDeg=7,
+        arrowRadius = 1.8
+        i_arrows = (
+            Group(
+                Arrow(
+                    LEFT * arrowRadius,
+                    RIGHT * arrowRadius,
+                    tip_kwargs=arrowConfig,
+                    stroke_radius=0.015,
+                ),
+                Arrow(
+                    RIGHT * arrowRadius,
+                    LEFT * arrowRadius,
+                    tip_kwargs=arrowConfig,
+                    stroke_radius=0.015,
+                ),
             )
-            .build()
-            .to_item(keep_last_frame=True)
-        )
-        i_tl1Clipped = TransformableFrameClip(
-            i_tl1, offset=(-0.225, -0.375), clip=(0.35, 0.1, 0.35, 0.45)
+            .points.arrange_in_grid(n_cols=1, v_buff=0.1)
+            .shift(DOWN * 1.25)
+            .r
         )
 
-        i_tl2 = (
-            TL_TalorSeries(
-                coefsFactory=lambda: it.chain(
-                    (0,), ((-1 if i % 2 == 0 else 1) / i for i in it.count(1))
-                ),
-                resultFn=lambda x: np.log(x + 1),
-                resultGraphConfig=pyr.m(x_range=(-0.99, 8)),
-                maxDeg=8,
-            )
-            .build()
-            .to_item(keep_last_frame=True)
+        tl1 = TL_Talor_Diagram(
+            coefsFactory=lambda: it.cycle((1, -1)),
+            resultFn=lambda x: 1 / (x + 1),
+            resultGraphConfig=pyr.m(x_range=(-0.8, 5)),
+            maxDeg=7,
+            coordShift=(-0.5, -1),
         )
+        tl2 = TL_Talor_Diagram(
+            coefsFactory=lambda: it.chain(
+                (0,), ((-1 if i % 2 == 0 else 1) / i for i in it.count(1))
+            ),
+            resultFn=lambda x: np.log(x + 1),
+            resultGraphConfig=pyr.m(x_range=(-0.8, 5)),
+            maxDeg=8,
+            coordShift=(-0.75, 0),
+            pauses=dict(
+                start=15.5,
+            ),
+            showResultFirst=False,
+        )
+
+        i_tl1 = tl1.build().to_item(keep_last_frame=True)
+        i_tl1Clipped = TransformableFrameClip(
+            i_tl1, offset=(-0.225, -0.15), clip=tl1.cropParams
+        )
+
+        i_tl2 = tl2.build().to_item(keep_last_frame=True)
         i_tl2Clipped = TransformableFrameClip(
-            i_tl2, offset=(0.125, -0.275), clip=(0.45, 0.2, 0.25, 0.35)
+            i_tl2, offset=(0.225, -0.15), clip=tl2.cropParams
         )
 
         self.show(i_tl1, i_tl2, i_tl1Clipped, i_tl2Clipped)
 
-        self.play(Write(i_poly1))
+        self.play(Write(Group(*i_poly1.i_symbol, i_poly1.i_eq)))
+        self.forward(2)
+        for i_sign, i_coef, i_term in zip(
+            i_poly1.i_signs, i_poly1.i_coefs, i_poly1.i_terms
+        ):
+            self.play(*(FadeIn(i_) for i_ in (i_sign, i_coef, i_term)), duration=0.5)
+            self.forward(1)
+        self.play(FadeIn(i_poly1.i_ellipsis), FadeIn(i_poly1.i_signs[-1]))
+
         self.forward(1)
         self.play(
             *(FadeIn(i_poly2.i_symbol[i]) for i in (0, 2, 3, 4, 5)),
@@ -1567,7 +1639,7 @@ class TL_Polynomial(Timeline):
             Transform(i_poly1.i_eq, i_poly2.i_eq, hide_src=False),
         )
 
-        self.forward(1)
+        self.forward(1.5)
         for i_coef1, i_term1, i_sign1, i_coef2, i_term2, i_sign2 in zip(
             i_poly1.i_coefs,
             i_poly1.i_terms,
@@ -1582,7 +1654,7 @@ class TL_Polynomial(Timeline):
                 Transform(i_term1, i_term2, hide_src=False, flatten=True),
                 duration=0.5,
             )
-            self.forward(0.5)
+            self.forward(1)
 
         self.play(
             Transform(i_poly1.i_signs[-1], i_poly2.i_signs[-1], hide_src=False),
@@ -1591,18 +1663,304 @@ class TL_Polynomial(Timeline):
         )
         self.forward(1)
         self.play(Transform(i_poly2.i_symbol, i_poly2NewSymbol))
-        self.play(Write(i_integral))
-        self.play(Write(i_deriv))
+        self.forward(2)
+        self.play(
+            i_tl1Clipped.anim.clip.set(x_offset=-0.29),
+            i_tl2Clipped.anim.clip.set(x_offset=0.29),
+        )
+        self.play(Write(i_integral, duration=1.5), Write(i_arrows[0], duration=1.5))
+        self.forward(1)
+        self.play(Write(i_deriv[::-1], duration=1.5), Write(i_arrows[1], duration=1.5))
 
         self.forward(2)
 
 
-class TL_Test(Timeline):
+class TL_SineDeriv(Timeline):
+    CONFIG = config
+
     def construct(self):
-        i_circ1 = Circle().stroke.set(alpha=0.5).r
-        i_circ2 = Circle(2).points.shift(RIGHT * 3).r.stroke.set(alpha=0.5).r
-        self.play(Create(i_circ1))
-        self.play(Transform(i_circ1, i_circ2, hide_src=False))
+        def createCoord():
+            i_coord = Axes(
+                x_range=(-PI * 2, PI * 2, PI / 2),
+                y_range=(-1.5, 1.5, 1),
+                y_axis_config=dict(unit_size=0.75),
+                x_axis_config=dict(unit_size=0.5),
+                axis_config=dict(tick_size=0.05),
+            )
+            for i_axis in i_coord.get_axes():
+                i_axis.ticks.set(stroke_radius=0.015)
+            i_coord.add(
+                SurroundingRect(i_coord, buff=0, color=WHITE, stroke_radius=0.015)
+            )
+            return i_coord
+
+        i_coords = (
+            Group(*(createCoord() for _ in range(4)))
+            .points.arrange_in_grid(n_cols=2, h_buff=0.5, v_buff=1)
+            .shift(UP * 0.75)
+            .r
+        )
+
+        i_1 = i_coords[-1]
+        i_2 = i_coords[-2]
+        i_coords.remove(i_1, i_2)
+        i_coords.add(i_1, i_2)
+
+        functions = (np.sin, np.cos, lambda x: -np.sin(x), lambda x: -np.cos(x))
+        colors = (RED, GREEN, BLUE, PINK)
+        i_graphs = Group(
+            *(i_.get_graph(f, color=c) for i_, f, c in zip(i_coords, functions, colors))
+        )
+        i_formulae = Group(
+            TypstMath("sin x"),
+            TypstMath("(sin x)' = cos x"),
+            TypstMath("(sin x)''  = -sin x"),
+            TypstMath("(sin x)''' = -cos x"),
+        )
+
+        for i_coord, i_formula in zip(i_coords, i_formulae):
+            i_formula.points.move_to(i_coord.points.box.bottom).shift(DOWN * 0.5)
+
+        i_lastCoord = None
+        i_lastGraph = None
+
+        def createTangentUpdaterFn(item: VItem) -> ItemUpdaterFn:
+            def updaterFn(params: UpdaterParams) -> TangentLine:
+                return TangentLine(item, params.alpha)
+
+            return updaterFn
+
+        def createDotUpdaterFn(i_graph: VItem) -> GroupUpdaterFn:
+            def updaterFn(i_dot: Dot, params: UpdaterParams) -> None:
+                i_dot.points.move_to(i_graph.points.pfp(params.alpha))
+
+            return updaterFn
+
+        def createLineUpdaterFn(
+            i_graph: VItem, i_coord: CoordinateSystem
+        ) -> GroupUpdaterFn:
+            def updaterFn(i_line: Line, params: UpdaterParams) -> None:
+                pointOnGraph = i_graph.points.pfp(params.alpha)
+                x, _ = i_coord.p2c(pointOnGraph)
+                pointOnAxis = i_coord.c2p(x, 0)
+                i_line.points.put_start_and_end_on(pointOnGraph, pointOnAxis)
+
+            return updaterFn
+
+        for i_coord, i_graph, i_formula in zip(i_coords, i_graphs, i_formulae):
+            if i_lastGraph is None:
+                self.play(FadeIn(i_coord))
+                self.play(Create(i_graph, duration=2), Write(i_formula))
+            else:
+                self.play(Transform(i_lastCoord, i_coord, hide_src=False, flatten=True))
+                i_tangent = TangentLine(i_lastGraph, 0)
+                i_dotOnGraph = Dot(i_graph.points.pfp(0), radius=0.06)
+                i_dotOnLastGraph = Dot(i_lastGraph.points.pfp(0), radius=0.06)
+                i_lineOnGraph = Line(ORIGIN, ORIGIN, stroke_alpha=0.75)
+                i_lineOnLastGraph = Line(ORIGIN, ORIGIN, stroke_alpha=0.75)
+                self.play(
+                    *(
+                        FadeIn(i_)
+                        for i_ in (
+                            i_tangent,
+                            i_dotOnGraph,
+                            i_dotOnLastGraph,
+                            i_lineOnGraph,
+                            i_lineOnLastGraph,
+                        )
+                    ),
+                    duration=0.5,
+                )
+                self.play(
+                    Create(i_graph),
+                    ItemUpdater(i_tangent, createTangentUpdaterFn(i_lastGraph)),
+                    GroupUpdater(i_dotOnGraph, createDotUpdaterFn(i_graph)),
+                    GroupUpdater(i_dotOnLastGraph, createDotUpdaterFn(i_lastGraph)),
+                    GroupUpdater(i_lineOnGraph, createLineUpdaterFn(i_graph, i_coord)),
+                    GroupUpdater(
+                        i_lineOnLastGraph, createLineUpdaterFn(i_lastGraph, i_lastCoord)
+                    ),
+                    duration=3,
+                )
+                self.play(
+                    *(
+                        FadeOut(i_)
+                        for i_ in (
+                            i_tangent,
+                            i_dotOnGraph,
+                            i_dotOnLastGraph,
+                            i_lineOnGraph,
+                            i_lineOnLastGraph,
+                        )
+                    ),
+                    FadeIn(i_formula),
+                    duration=0.5,
+                )
+            self.forward(1)
+            i_lastGraph = i_graph
+            i_lastCoord = i_coord
+
+        i_sinGraph, i_negSinGraph = i_graphs[0], i_graphs[2]
+
+        self.play(i_sinGraph.anim.glow.set(color=colors[0], alpha=0.5, size=0.75))
+        self.forward(0.5)
+        self.play(i_negSinGraph.anim.glow.set(color=colors[2], alpha=0.5, size=0.75))
+        self.forward(0.5)
+        self.play(ShowPassingFlashAround(i_formulae[2][-5], time_width=3, duration=2))
+        self.forward(2)
+
+        i_dotOnGraph1 = Dot(i_sinGraph.points.pfp(0), radius=0.06)
+        i_dotOnGraph2 = Dot(i_negSinGraph.points.pfp(0), radius=0.06)
+        i_lineOnGraph1 = Line(ORIGIN, ORIGIN, stroke_alpha=0.75)
+        i_lineOnGraph2 = Line(ORIGIN, ORIGIN, stroke_alpha=0.75)
+
+        self.play(
+            i_sinGraph.anim.glow.set(alpha=0).r.stroke.set(alpha=0.5),
+            i_negSinGraph.anim.glow.set(alpha=0).r.stroke.set(alpha=0.5),
+            *(
+                FadeIn(i_)
+                for i_ in (i_dotOnGraph1, i_dotOnGraph2, i_lineOnGraph1, i_lineOnGraph2)
+            ),
+            duration=0.5,
+        )
+        self.forward(0.5)
+
+        i_sinGraphCp = i_sinGraph.copy().stroke.set(alpha=1).r
+        i_negSinGraphCp = i_negSinGraph.copy().stroke.set(alpha=1).r
+
+        self.play(
+            Create(i_sinGraphCp),
+            Create(i_negSinGraphCp),
+            GroupUpdater(i_dotOnGraph1, createDotUpdaterFn(i_sinGraph)),
+            GroupUpdater(i_dotOnGraph2, createDotUpdaterFn(i_negSinGraph)),
+            GroupUpdater(i_lineOnGraph1, createLineUpdaterFn(i_sinGraph, i_coords[0])),
+            GroupUpdater(
+                i_lineOnGraph2, createLineUpdaterFn(i_negSinGraph, i_coords[2])
+            ),
+            duration=3,
+        )
+        self.forward(0.5)
+        self.play(
+            *(
+                FadeOut(i_)
+                for i_ in (i_dotOnGraph1, i_dotOnGraph2, i_lineOnGraph1, i_lineOnGraph2)
+            ),
+            duration=0.5,
+        )
+        # self.play(Transform(i_graphs[0], i_graphs[2], hide_src=False), duration=2)
+
+        self.forward(2)
+
+
+class TL_Waveform(Timeline):
+    def construct(self):
+        import fantazia.synth.waveform as w
+
+        waveform = w.square
+        n_harmonics = 15
+
+        i_coord = (
+            Axes(
+                x_range=(0, 1, 0.5),
+                y_range=(-1, 1, 1),
+                axis_config=dict(tick_size=0.05),
+                x_axis_config=dict(unit_size=self.config_getter.frame_x_radius * 2),
+                y_axis_config=dict(unit_size=2),
+                num_sampled_graph_points_per_tick=100,
+            )
+            .points.move_to(ORIGIN)
+            .r
+        )
+        for i_axis in i_coord.get_axes():
+            i_axis.ticks.set(stroke_radius=0.015)
+        i_coord.remove(i_coord.get_axes()[1])
+        i_waveformGraph = i_coord.get_graph(
+            waveform,
+            stroke_color="#00ff00",
+            glow_color="#00ff00",
+            glow_alpha=0.5,
+            glow_size=0.5,
+            x_range=(-0.01, 1.01),
+        )
+
+        self.play(Create(i_coord))
+        self.play(Create(i_waveformGraph))
+        self.forward(2)
+        self.play(FadeOut(i_waveformGraph))
+        self.forward(1)
+
+        i_harmonicGraphs = Group()
+        i_lastCumulativeGraph = None
+        for k in range(1, n_harmonics + 1):
+            i_harmonicGraph = i_coord.get_graph(
+                partial(waveform.h, k), stroke_color="#00ff00"
+            )
+            i_cumulativeGraph = i_coord.get_graph(waveform[:k], stroke_color="#00ff00")
+            i_harmonicGraphs.add(i_harmonicGraph)
+            self.play(Create(i_harmonicGraph), duration=1)
+            if i_lastCumulativeGraph is not None:
+                self.play(
+                    Transform(i_harmonicGraph, i_cumulativeGraph),
+                    Transform(i_lastCumulativeGraph, i_cumulativeGraph),
+                    duration=1,
+                )
+            else:
+                self.play(Transform(i_harmonicGraph, i_cumulativeGraph), duration=1)
+            self.forward(1)
+            i_lastCumulativeGraph = i_cumulativeGraph
+
+        self.play(Transform(i_lastCumulativeGraph, i_waveformGraph))
+        self.forward(1)
+
+        for i_ in i_harmonicGraphs:
+            i_.stroke.set(alpha=0)
+        self.show(i_harmonicGraphs)
+
+        distance = 1
+        a_flip = Audio(DIR / "assets/sound/flip.mp3")
+        a_penClick = Audio(DIR / "assets/sound/pen-click.wav")
+        i_cameraInitState = self.camera.store()
+        self.play_audio(a_flip)
+        self.play(
+            *(
+                i_graph.update.points.shift(IN * distance * (i + 1))
+                .r.stroke.set(alpha=0.5)
+                .r
+                for i, i_graph in enumerate(i_harmonicGraphs)
+            ),
+            self.camera.anim.points.rotate(-PI / 6, axis=RIGHT, about_point=ORIGIN)
+            .rotate(PI / 6, axis=UP, about_point=ORIGIN)
+            .shift((4, 1.72, 1.5))
+            .r,
+        )
+
+        totalTime = 3
+        incFactor = 1.1
+        firstTime = totalTime / (incFactor**n_harmonics - 1) * (incFactor - 1)
+
+        self.forward(0.5)
+        self.play_audio(a_penClick)
+        self.play(i_harmonicGraphs[0].update.stroke.set(alpha=1), duration=0.1)
+        self.forward(firstTime)
+        for i, (i_lastGraph, i_graph) in enumerate(it.pairwise(i_harmonicGraphs), 1):
+            self.play_audio(a_penClick)
+            i_lastGraph.stroke.set(alpha=0.5)
+            i_graph.stroke.set(alpha=1)
+            self.forward(firstTime * incFactor**i)
+        self.play(i_graph.update.stroke.set(alpha=0.5), duration=0.1)
+        self.forward(2)
+
+        self.play_audio(a_flip)
+        self.play(
+            self.camera.anim.restore(i_cameraInitState),
+            *(
+                i_graph.update.points.shift(OUT * distance * (i + 1))
+                .r.stroke.set(alpha=0)
+                .r
+                for i, i_graph in enumerate(i_harmonicGraphs)
+            ),
+        )
+        self.hide(i_harmonicGraphs)
 
         self.forward(2)
 
@@ -1626,4 +1984,29 @@ if __name__ == "__main__":
 ################################################################################
 ################################################################################
 ################################################################################
-######################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
