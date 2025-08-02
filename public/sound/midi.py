@@ -1,7 +1,11 @@
 from pathlib import Path
-import time, subprocess, shutil, os
+import time
+import subprocess
+import shutil
+import os
 
-import toml, music21 as m21
+import toml
+import music21 as m21
 from scipy.io import wavfile
 from janim.imports import *
 import fantazia as fz

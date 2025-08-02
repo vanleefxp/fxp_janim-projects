@@ -16,3 +16,5 @@
   stroke: 0.5pt + white,
   align: center + horizon,
 )
+#show sym.gt.eq: sym.gt.eq.slant
+#show sym.lt.eq: sym.lt.eq.slant

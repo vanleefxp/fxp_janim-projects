@@ -9,6 +9,7 @@ from janim.imports import *
 import numpy as np
 from egcd import egcd
 import pyrsistent as pyr
+import fantazia.synth.waveform as w
 
 DIR = Path(__file__).parent if "__file__" in locals() else Path.cwd()
 arrowConfig = dict(center_anchor="front", body_length=0.15, back_width=0.15)
@@ -101,16 +102,22 @@ def cubeEdgeLines(p0: Vect, p1: Vect) -> Group[Line]:
     return i_group
 
 
+def nvec2d(v: Vect) -> Vect:
+    x, y, *_ = v
+    return np.array((-y, x, 0))
+
+
+def unvec2d(v: Vect) -> Vect:
+    nvec = nvec2d(v)
+    return nvec / np.linalg.norm(nvec)
+
+
 @lru_cache(maxsize=1 << 10)
 def charCount(src: str, textType: type[Text | TypstDoc] = TypstMath):
     src = src.strip()
     if len(src) == 0:
         return 0
     return len(textType(src))
-
-
-def _createPolynomialCoef(n: int) -> str:
-    return f"a_({n})"
 
 
 def createPolynomialTerm(n: int, sym: str = "x") -> str:
@@ -179,6 +186,12 @@ class MarkedTypstMath(TypstMath, MarkedItem):
             self.add(createEmptyItem())
             self.mark.set_points(((0, y0, 0),))
         self.mark.set(ORIGIN)
+
+
+class MarkedText(Text, MarkedItem):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.mark.set_points((ORIGIN,))
 
 
 type Sgn = Literal[1, -1]
@@ -255,7 +268,7 @@ class NumberedPolyTermOpt(PolyTermOptBase):
         return f"{self.symbol}_({self.order})"
 
 
-class RationalPolyTermOpt[N = Rational](PolyTermOptBase):
+class RationalPolyTermOpt[N: Rational](PolyTermOptBase):
     def __new__(cls, coef: N, order: int) -> Self:
         self = super().__new__(cls)
         self._coef = coef
@@ -285,6 +298,35 @@ class RationalPolyTermOpt[N = Rational](PolyTermOptBase):
         return self.coef == 0
 
 
+class FloatPolyTermOpt(PolyTermOptBase):
+    def __new__(cls, coef: float, order: int, digits: int = 2) -> Self:
+        self = super().__new__(cls)
+        self._coef = coef
+        self._order = order
+        self._digits = digits
+        return self
+
+    @property
+    def coef(self) -> float:
+        return self._coef
+
+    @property
+    def digits(self) -> int:
+        return self._digits
+
+    @property
+    def sign(self) -> Sgn:
+        return 1 if self.coef >= 0 else -1
+
+    @property
+    def order(self) -> int:
+        return self._order
+
+    @property
+    def coefSrc(self) -> str:
+        return f"{self.coef:.{self.digits}f}"
+
+
 class PolynomialText(Group[VItem], MarkedItem):
     def __init__(
         self,
@@ -294,6 +336,7 @@ class PolynomialText(Group[VItem], MarkedItem):
         typstConfig: Mapping[str, Any] = pyr.m(),
         widths: Mapping[str, Any] = _polynomialDefaultWidths,
         aligns: Mapping[str, Any] = _polynomialDefaultAligns,
+        showEllipsis: bool = True,
         *args,
         **kwargs,
     ):
@@ -305,6 +348,11 @@ class PolynomialText(Group[VItem], MarkedItem):
             widths = _polynomialDefaultWidths | widths
         if aligns is not _polynomialDefaultAligns:
             aligns = _polynomialDefaultAligns | aligns
+
+        (
+            self._widths,
+            self._aligns,
+        ) = widths, aligns
 
         # 多项式符号
         i_symbol = self._i_symbol = halign(
@@ -326,7 +374,8 @@ class PolynomialText(Group[VItem], MarkedItem):
 
         i_coefs = self._i_coefs = Group()  # 系数
         i_terms = self._i_terms = Group()  # 项
-        i_signs = self._i_adds = Group()  # 加号
+        i_signs = self._i_adds = Group()  # 符号
+        self._coefPos = coefPos = []
 
         pos = 0
         for i, termOpt in enumerate(terms):
@@ -362,6 +411,7 @@ class PolynomialText(Group[VItem], MarkedItem):
                 )
             )
             pos += widths["coef"]
+            coefPos.append(pos)
             self.add(*i_coef)
 
             # 项
@@ -390,7 +440,6 @@ class PolynomialText(Group[VItem], MarkedItem):
             )
         )
         pos += widths["sign"]
-        self.add(*i_sign)
 
         i_ellipsis = self._i_ellipsis = halign(
             MarkedTypstMath("...", **typstConfig),
@@ -398,7 +447,8 @@ class PolynomialText(Group[VItem], MarkedItem):
             widths["ellipsis"],
             aligns["ellipsis"],
         )
-        self.add(*i_ellipsis)
+        if showEllipsis:
+            self.add(*i_sign, *i_ellipsis)
 
         self.mark.set_points((ORIGIN,))
 
@@ -425,6 +475,28 @@ class PolynomialText(Group[VItem], MarkedItem):
     @property
     def i_ellipsis(self) -> VItem:
         return self._i_ellipsis
+
+    def putSymbol[I: MarkedItem](self, item: I) -> I:
+        widths, aligns = self._widths, self._aligns
+        halign(
+            item,
+            -widths["eq"] - widths["symbol"],
+            widths["symbol"],
+            aligns["symbol"],
+        )
+        item.mark.set(item.mark.get() + self.mark.get())
+        return item
+
+    def putCoef[I: MarkedItem](self, idx, item: I) -> I:
+        widths, aligns = self._widths, self._aligns
+        halign(
+            item,
+            self._coefPos[idx],
+            widths["coef"],
+            aligns["coef"],
+        )
+        item.mark.set(item.mark.get() + self.mark.get())
+        return item
 
 
 class TL_Coord(Timeline):
@@ -1435,6 +1507,213 @@ class TL_CRT(Timeline):
         self.forward(2)
 
 
+class PolyDiagram(Axes):
+    def __init__(
+        self,
+        degree: int = 0,
+        x_extent=3,
+        y_extent=2.5,
+        num_sampled_graph_points_per_tick=100,
+        *args,
+        **kwargs,
+    ):
+        super().__init__(
+            x_range=(-x_extent, x_extent),
+            y_range=(-y_extent, y_extent),
+            num_sampled_graph_points_per_tick=num_sampled_graph_points_per_tick,
+            *args,
+            **kwargs,
+            depth=-1,
+        )
+
+        for i_axis in self.get_axes():
+            i_axis.ticks.set(stroke_radius=0.015)
+
+        self._degree = degree
+
+        x_right = x_extent
+        if degree != 0:
+            x_right = min(x_right, y_extent ** (1 / degree))
+
+        i_border = SurroundingRect(
+            self,
+            buff=0,
+            color=WHITE,
+            fill_color=BLACK,
+            fill_alpha=1,
+            stroke_radius=0.015,
+        )
+        self._i_graph = i_graph = self.get_graph(
+            lambda x: x**degree,
+            x_range=(-x_right, x_right),
+            color=RED,
+            depth=-2,
+            bind=False,
+        )
+        self.i_formula = i_formula = (
+            MarkedTypstMath(
+                "1" if degree == 0 else "x" if degree == 1 else f"x^{degree}",
+                depth=-4,
+            )
+            .mark.set(i_border.points.box.get(DL) + (0.2, 0.2, 0))
+            .r
+        )
+        i_formula.add(
+            SurroundingRect(
+                i_formula,
+                buff=0.15,
+                stroke_alpha=0,
+                fill_color=BLACK,
+                fill_alpha=0.5,
+                depth=-3,
+            )
+        )
+
+        self.add(i_border, i_graph, i_formula)
+
+    @property
+    def i_graph(self) -> ParametricCurve:
+        return self._i_graph
+
+
+class TL_Polynomial_Diagrams(Timeline):
+    def construct(self):
+        i_polyDiagrams = (
+            Group(
+                *(
+                    PolyDiagram(
+                        degree=i,
+                        axis_config=dict(tick_size=0.05),
+                        x_axis_config=dict(unit_size=0.5),
+                        y_axis_config=dict(unit_size=0.5),
+                    )
+                    for i in range(8)
+                )
+            )
+            .points.arrange_in_grid(n_cols=4, h_buff=0.5, v_buff=0.5)
+            .to_center()
+            .shift(UP * 0.5)
+            .r
+        )
+        # self.show(i_polyDiagrams)
+        self.play(
+            AnimGroup(
+                *(GrowFromPoint(i_, ORIGIN) for i_ in i_polyDiagrams),
+                lag_ratio=0.1,
+                duration=2.5,
+            )
+        )
+        self.forward(2)
+        self.play(
+            AnimGroup(
+                *(FadeOut(i_) for i_ in i_polyDiagrams), lag_ratio=0.1, duration=1
+            )
+        )
+
+
+class TL_Polynomial(Timeline):
+    CONFIG = config
+
+    def construct(self):
+        poly = np.polynomial.Polynomial((8, -2, -9, 2, 1))
+
+        i_coord = (
+            NumberPlane(
+                x_range=(-8, 8, 1),
+                y_range=(-64, 98, 16),
+                depth=3,
+                y_axis_config=dict(unit_size=1 / 16),
+                background_line_style={"stroke_alpha": 0.75},
+            )
+            .points.shift((0.75, -0.25, 0))
+            .r
+        )
+        i_graph = i_coord.get_graph(lambda _: 0, color=RED, depth=2)
+        self.play(Create(i_coord))
+        self.forward(1)
+
+        i_diagrams = (
+            Group(
+                *(
+                    PolyDiagram(
+                        i,
+                        x_extent=3,
+                        y_extent=2.5,
+                        x_axis_config=dict(unit_size=0.4),
+                        y_axis_config=dict(unit_size=0.4),
+                        axis_config=dict(tick_size=0.05),
+                    )
+                    for i in range(len(poly))
+                )
+            )
+            .points.arrange_in_grid(n_rows=1, h_buff=0.25)
+            .to_border(UP)
+            .shift(UP * 0.25)
+            .r
+        )
+
+        def createCoefText(coef: float, diagram: PolyDiagram) -> Text:
+            i_text = (
+                Text(
+                    f"{coef:.2f}".replace("-", "\u2212"),
+                    depth=-4,
+                    stroke_alpha=1,
+                    stroke_color=WHITE,
+                    stroke_radius=0.005,
+                )
+                .points.scale(0.8)
+                .next_to(diagram.points.box.get(DR), UL, buff=0.15)
+                .r
+            )
+            i_text.add(
+                SurroundingRect(
+                    i_text,
+                    buff=0.1,
+                    stroke_alpha=0,
+                    stroke_color=BLACK,
+                    fill_color=BLACK,
+                    fill_alpha=0.5,
+                    depth=-3,
+                )
+            )
+            return i_text
+
+        i_coefTexts = Group(
+            *(createCoefText(poly.coef[i], i_diagrams[i]) for i in range(len(poly)))
+        )
+        self.play(
+            AnimGroup(*(FadeIn(i_) for i_ in i_diagrams), lag_ratio=0.25, duration=1)
+        )
+        self.forward(1)
+        self.play(Create(i_graph))
+
+        def createPolyGraphUpdaterFn(deg):
+            def updaterFn(params: UpdaterParams) -> ParametricCurve:
+                t = params.alpha
+                interpPoly = np.polynomial.Polynomial(
+                    np.append(poly.coef[:deg], poly.coef[deg] * t)
+                )
+                return i_coord.get_graph(interpPoly, color=RED, depth=2)
+
+            return updaterFn
+
+        def createCoefTextUpdateFn(deg):
+            def updaterFn(params: UpdaterParams) -> Text:
+                t = params.alpha
+                coef = poly.coef[deg] * t
+                return createCoefText(coef, i_diagrams[deg])
+
+            return updaterFn
+
+        for i in range(len(poly)):
+            self.play(
+                ItemUpdater(i_graph, createPolyGraphUpdaterFn(i)),
+                ItemUpdater(i_coefTexts[i], createCoefTextUpdateFn(i)),
+                duration=2,
+            )
+        self.forward(2)
+
+
 class TL_Talor_Diagram(Timeline):
     _defaultPauses = pyr.m(start=0, beforeShowPoly=1)
 
@@ -1554,9 +1833,13 @@ class TL_Talor(Timeline):
             .r.points.shift(DOWN * 1.25)
             .r
         )
-        i_poly2NewSymbol = (
-            TypstMath("ln(x + 1)").points.next_to(i_poly2.i_eq, LEFT, buff=0.15).r
+        i_convergenceRadius = (
+            TypstMath("(-1 < x < 1)", fill_alpha=0.9)(VItem)
+            .points.scale(0.8)
+            .next_to(i_poly1, DOWN, buff=0.2, aligned_edge=RIGHT)
+            .r
         )
+        i_poly2NewSymbol = i_poly2.putSymbol(MarkedTypstMath("ln(x + 1)"))
         i_integral = (
             TypstMath('integral_0^x ("d" t) / (t + 1) = ln(x + 1)')
             .points.shift(DOWN * 0.25)
@@ -1622,7 +1905,9 @@ class TL_Talor(Timeline):
 
         self.show(i_tl1, i_tl2, i_tl1Clipped, i_tl2Clipped)
 
-        self.play(Write(Group(*i_poly1.i_symbol, i_poly1.i_eq)))
+        self.play(
+            Write(Group(*i_poly1.i_symbol, i_poly1.i_eq)), FadeIn(i_convergenceRadius)
+        )
         self.forward(2)
         for i_sign, i_coef, i_term in zip(
             i_poly1.i_signs, i_poly1.i_coefs, i_poly1.i_terms
@@ -1637,6 +1922,9 @@ class TL_Talor(Timeline):
             Transform(i_poly1.i_symbol[2:5], i_poly2.i_symbol[6:9], hide_src=False),
             Transform(i_poly1.i_symbol[1], i_poly2.i_symbol[1], hide_src=False),
             Transform(i_poly1.i_eq, i_poly2.i_eq, hide_src=False),
+            i_convergenceRadius.anim.points.next_to(
+                i_poly2, DOWN, buff=0.2, aligned_edge=RIGHT
+            ),
         )
 
         self.forward(1.5)
@@ -1853,11 +2141,14 @@ class TL_SineDeriv(Timeline):
 
 
 class TL_Waveform(Timeline):
-    def construct(self):
-        import fantazia.synth.waveform as w
+    def __init__(self, waveform: w.Waveform = w.square) -> None:
+        super().__init__()
+        self._waveform = waveform
 
-        waveform = w.square
+    def construct(self):
+        waveform = self._waveform
         n_harmonics = 15
+        smallAmpThresh = 1e-4
 
         i_coord = (
             Axes(
@@ -1885,28 +2176,33 @@ class TL_Waveform(Timeline):
 
         self.play(Create(i_coord))
         self.play(Create(i_waveformGraph))
-        self.forward(2)
+        self.forward(1)
         self.play(FadeOut(i_waveformGraph))
         self.forward(1)
 
-        i_harmonicGraphs = Group()
-        i_lastCumulativeGraph = None
-        for k in range(1, n_harmonics + 1):
-            i_harmonicGraph = i_coord.get_graph(
-                partial(waveform.h, k), stroke_color="#00ff00"
+        i_harmonicGraphs = Group(
+            *(
+                i_coord.get_graph(partial(waveform.h, k), stroke_color="#00ff00")
+                for k in range(1, n_harmonics + 1)
             )
+        )
+        i_lastCumulativeGraph = None
+        for k, (coef, i_harmonicGraph) in enumerate(
+            zip(it.islice(waveform, 1, None), i_harmonicGraphs), 1
+        ):
+            if abs(coef) < smallAmpThresh:
+                continue
             i_cumulativeGraph = i_coord.get_graph(waveform[:k], stroke_color="#00ff00")
-            i_harmonicGraphs.add(i_harmonicGraph)
             self.play(Create(i_harmonicGraph), duration=1)
-            if i_lastCumulativeGraph is not None:
+            if i_lastCumulativeGraph is None:
+                self.play(Transform(i_harmonicGraph, i_cumulativeGraph), duration=1)
+            else:
                 self.play(
                     Transform(i_harmonicGraph, i_cumulativeGraph),
                     Transform(i_lastCumulativeGraph, i_cumulativeGraph),
                     duration=1,
                 )
-            else:
-                self.play(Transform(i_harmonicGraph, i_cumulativeGraph), duration=1)
-            self.forward(1)
+            # self.forward(1)
             i_lastCumulativeGraph = i_cumulativeGraph
 
         self.play(Transform(i_lastCumulativeGraph, i_waveformGraph))
@@ -1962,6 +2258,260 @@ class TL_Waveform(Timeline):
         )
         self.hide(i_harmonicGraphs)
 
+        self.forward(2)
+
+
+class TL_VecDotProduct(Timeline):
+    CONFIG = config
+
+    def construct(self) -> None:
+        rx, ry = self.config_getter.frame_x_radius, self.config_getter.frame_y_radius
+        i_coord = (
+            NumberPlane(
+                x_range=(-10, 10),
+                y_range=(-6, 6),
+                background_line_style=dict(stroke_alpha=0.75),
+                x_axis_config=dict(unit_size=0.75),
+                y_axis_config=dict(unit_size=0.75),
+                depth=2,
+            )
+            .points.shift((-3, 0, 0))
+            .r
+        )
+
+        i_dotProductFormula = (
+            TypstMath(
+                f"""
+                angle.l
+                text(arrow.tr, fill: #rgb("{RED}")),
+                text(arrow.br, fill: #rgb("{GREEN}"))
+                angle.r =
+                """,
+                depth=-1,
+            )
+            .points.to_border(UL)
+            .r
+        )
+        i_dotProductFormula[1].set(
+            stroke_alpha=1, stroke_radius=0.005, stroke_color=RED
+        )
+        i_dotProductFormula[3].set(
+            stroke_alpha=1, stroke_radius=0.005, stroke_color=GREEN
+        )
+
+        def createDotProductValueText(value: float) -> Text:
+            i_dotProductValue = (
+                Text(f"{value:.2f}".replace("-", "\u2212"), depth=-1)
+                .points.next_to(i_dotProductFormula, RIGHT, buff=0.2)
+                .r
+            )
+            return i_dotProductValue
+
+        i_dotProductValue = createDotProductValueText(0)
+        i_bgRect = SurroundingRect(
+            Group(i_dotProductFormula, i_dotProductValue),
+            buff=0.2,
+            fill_color=BLACK,
+            fill_alpha=0.75,
+            stroke_alpha=0,
+            stroke_color=BLACK,
+            stroke_radius=0,
+            depth=1,
+        )
+
+        def createValueUpdaterFn(start1, end1, start2, end2):
+            def updaterFn(params: UpdaterParams) -> None:
+                t = params.alpha
+                p1 = interpolate(start1, end1, t)
+                p2 = interpolate(start2, end2, t)
+                value = np.dot(p1, p2)
+                return createDotProductValueText(value)
+
+            return updaterFn
+
+        def createVecUpdaterFn(start, end):
+            start = np.array(start)
+            end = np.array(end)
+
+            def updaterFn(item: Arrow, params: UpdaterParams) -> None:
+                t = params.alpha
+                point = interpolate(start, end, t)
+                item.points.put_start_and_end_on(coordOrigin, i_coord.c2p(*point))
+
+            return updaterFn
+
+        origin = np.array((0, 0))
+        vec1 = np.array((2, 2))
+        vec2 = np.array((4, -1))
+
+        coordOrigin = i_coord.c2p(0, 0)
+        i_vec1 = Arrow(coordOrigin, coordOrigin, buff=0, color=RED)
+        i_vec2 = Arrow(coordOrigin, coordOrigin, buff=0, color=GREEN)
+
+        def vecAnim(start1, end1, start2, end2):
+            return AnimGroup(
+                GroupUpdater(i_vec1, createVecUpdaterFn(start1, end1)),
+                GroupUpdater(i_vec2, createVecUpdaterFn(start2, end2)),
+                ItemUpdater(
+                    i_dotProductValue, createValueUpdaterFn(start1, end1, start2, end2)
+                ),
+            )
+
+        i_formulae = (
+            TypstDoc(
+                (DIR / "assets/typst/vec-dot-product-properties.typ").read_text(
+                    encoding="utf-8"
+                ),
+                depth=-1,
+            )
+            .points.move_to((4.8, 0.25, 0))
+            .r
+        )
+        i_formula1 = i_formulae[0:24]
+        i_formula2 = i_formulae[24:38]
+        i_formula3 = i_formulae[38:]
+
+        i_formulaeBackground = Rect(
+            (rx / 3, -ry - 0.25, 0),
+            (rx + 0.25, ry + 0.25, 0),
+            fill_color=BLACK,
+            fill_alpha=0.75,
+            stroke_color=WHITE,
+            stroke_alpha=0.75,
+            stroke_radius=0.01,
+            depth=1,
+        )
+
+        self.play(Create(i_coord), FadeIn(i_formulaeBackground))
+
+        self.play(
+            FadeIn(i_bgRect, duration=1),
+            Succession(
+                Write(i_dotProductFormula, duration=0.75),
+                FadeIn(i_dotProductValue, duration=0.25),
+                duration=1,
+            ),
+        )
+
+        self.show(i_vec2, i_vec1)
+        self.play(vecAnim(origin, vec1, origin, vec2), duration=2)
+        self.forward(2)
+
+        # 双线性性
+
+        def createMultText(vec, mult, direction=1) -> Text:
+            direction = 1 if direction >= 0 else -1
+            vec = np.array(vec)
+            nvec = unvec2d(vec)
+            x, y, *_ = vec
+            dirAngle = np.atan2(y, x)
+            i_multText = (
+                Text(f"{mult:.2f}×".replace("-", "\u2212"), depth=-1)
+                .points.move_to(coordOrigin)
+                .r
+            )
+            (
+                i_multText.add(
+                    SurroundingRect(
+                        i_multText,
+                        buff=0.1,
+                        stroke_color=BLACK,
+                        stroke_radius=0,
+                        fill_alpha=0.75,
+                        fill_color=BLACK,
+                    )
+                )
+                .points.rotate(dirAngle, about_point=coordOrigin)
+                .move_to(i_coord.c2p(*(vec * (mult / 2))))
+                .shift(nvec * (0.75 * direction))
+            )
+            return i_multText
+
+        def animateVecScale(idx, mults=(2,)):
+            direction = 1 if idx == 0 else -1
+            i_vec = i_vec1 if idx == 0 else i_vec2
+            i_vecCp = i_vec.copy().set(fill_alpha=0.75, stroke_alpha=0.75)
+            vec = vec1 if idx == 0 else vec2
+
+            unvec = unvec2d(vec)
+            i_brace = Brace(i_vec, unvec * direction)
+            i_multText = createMultText(vec, 1, direction)
+            self.play(
+                *(FadeIn(i_) for i_ in (i_brace, i_multText, i_vecCp)), duration=0.5
+            )
+            self.play(
+                ShowPassingFlashAround(i_dotProductValue, time_width=3, duration=2)
+            )
+            self.forward(0.5)
+            for lastMult, mult in it.pairwise(it.chain((1,), mults, (1,))):
+                self.play(
+                    vecAnim(vec1 * lastMult, vec1 * mult, vec2, vec2)
+                    if idx == 0
+                    else vecAnim(vec1, vec1, vec2 * lastMult, vec2 * mult),
+                    DataUpdater(
+                        i_brace, lambda i_, _: i_.points.match(i_vec.current())
+                    ),
+                    ItemUpdater(
+                        i_multText,
+                        lambda params, lastMult=lastMult, mult=mult: createMultText(
+                            vec, interpolate(lastMult, mult, params.alpha), direction
+                        ),
+                    ),
+                    duration=0.75,
+                )
+                self.play(
+                    ShowPassingFlashAround(i_dotProductValue, time_width=3, duration=1)
+                )
+                self.forward(0.5)
+            self.play(
+                *(FadeOut(i_) for i_ in (i_brace, i_multText, i_vecCp)), duration=0.5
+            )
+
+        animateVecScale(0, (2,))
+        self.forward(1)
+        animateVecScale(1, (1.5,))
+        self.play(Write(i_formula1), duration=1)
+        self.forward(2)
+
+        # 对称性
+        self.play(ShowPassingFlashAround(i_dotProductValue, time_width=3, duration=2))
+        self.forward(0.5)
+        self.play(vecAnim(vec1, vec2, vec2, vec1), duration=2)
+        self.play(ShowPassingFlashAround(i_dotProductValue, time_width=3, duration=1))
+        self.forward(0.5)
+        self.play(vecAnim(vec2, vec1, vec1, vec2), duration=2)
+        self.play(ShowPassingFlashAround(i_dotProductValue, time_width=3, duration=1))
+        self.play(Write(i_formula2), duration=1)
+        self.forward(2)
+
+        # 正定性
+        self.play(vecAnim(vec1, vec1, vec2, vec1))
+        self.play(
+            i_vec2.anim.set(stroke_alpha=0, fill_alpha=0),
+            i_dotProductFormula[3]
+            .anim.points.rotate(PI / 2)
+            .r.fill.set(color=RED)
+            .r.stroke.set(color=RED),
+            duration=0.5,
+        )
+        self.forward(1)
+
+        targetPoints = np.array(((4, -3), (-4, -2), (-3, 3), vec1))
+        for lastP, p in it.pairwise(it.chain((vec1,), targetPoints)):
+            self.play(vecAnim(lastP, p, lastP, p), duration=1)
+            self.forward(0.5)
+
+        self.play(vecAnim(p, origin, p, origin), duration=2)
+        self.play(Write(i_formula3), duration=1)
+
+        self.forward(2)
+
+
+class TL_Test(Timeline):
+    def construct(self):
+        i_arrow = Arrow(ORIGIN, ORIGIN, buff=0)
+        self.play(Create(i_arrow))
+        i_arrow.points.put_start_and_end_on(ORIGIN, np.array((3, 1, 0)))
         self.forward(2)
 
 
