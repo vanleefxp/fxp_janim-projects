@@ -18,3 +18,14 @@
 )
 #show sym.gt.eq: sym.gt.eq.slant
 #show sym.lt.eq: sym.lt.eq.slant
+#show terms: it => {
+  grid(
+    ..it.children
+      .map(item => (strong(item.term), item.description))
+      .join(),
+    columns: (auto, 1fr),
+    row-gutter: if (it.tight) { par.leading } else { par.spacing },
+    column-gutter: 1em,
+    align: top + start,
+  )
+}
