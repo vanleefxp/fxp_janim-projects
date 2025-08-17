@@ -1,3 +1,5 @@
+#import "@janim/colors:0.0.0": *
+
 #set text(
   font: (
     "New Computer Modern",
@@ -29,3 +31,5 @@
     align: top + start,
   )
 }
+
+#let boldup(body) = math.bold(math.upright(body))
