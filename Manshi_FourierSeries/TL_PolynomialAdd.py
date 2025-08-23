@@ -24,7 +24,7 @@ class TL_PolynomialAdd(Timeline):
 
         polyWidths = frozendict(coef=1.6)
         polyAligns = frozendict(coef=0)
-        textStrokeCfg = frozendict(stroke_alpha=1, stroke_radius=0.2)
+        textStrokeCfg = frozendict(stroke_alpha=1, stroke_radius=0.005)
         i_poly1 = PolynomialText(
             terms=(NumberedPolyTermOpt(i, "a") for i in range(4)),
             nameSymbol="p(x)",

@@ -1,0 +1,42 @@
+from pathlib import Path
+
+import svgpathtools as svgp
+import numpy as np
+from scipy.integrate import quad
+
+DIR = Path(__file__).parent if "__file__" in locals() else Path.cwd()
+
+
+def get_foureir_coefs(svg_file, max_n: int = 300):
+    svgpath = svgp.svg2paths(svg_file)[0][0]
+    xmin, xmax, ymin, ymax = svgpath.bbox()
+    x0 = (xmin + xmax) / 2
+    y0 = (ymin + ymax) / 2
+    rx = (xmax - xmin) / 2
+    ry = (ymax - ymin) / 2
+    scale_ratio = 1 / max(rx, ry)
+    svgpath: svgp.Path = svgpath.translated(complex(-x0, -y0)).scaled(
+        scale_ratio, -scale_ratio
+    )
+
+    coefs = np.empty(2 * max_n - 1, dtype=complex)
+    for n in range(-max_n + 1, max_n):
+        print(f"{n = }")
+        coefs[n], _ = quad(
+            lambda t: np.exp(-2j * np.pi * n * t) * svgpath.point(t),
+            0,
+            1,
+            complex_func=True,
+            limit=200,
+            epsabs=1e-10,
+            epsrel=1e-10,
+        )
+
+    return coefs
+
+
+if __name__ == "__main__":
+    for file in (DIR / "assets/image/fourier-anim-shapes").glob("*.svg"):
+        coefs = get_foureir_coefs(file)
+        print(coefs)
+        np.save(DIR / f"assets/data/fourier-coefs/{file.stem}.npy", coefs)

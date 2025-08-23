@@ -1,4 +1,4 @@
-#import "@janim/colors:0.0.0": *
+// #import "@janim/colors:0.0.0": *
 
 #set text(
   font: (
@@ -33,3 +33,4 @@
 }
 
 #let boldup(body) = math.bold(math.upright(body))
+
