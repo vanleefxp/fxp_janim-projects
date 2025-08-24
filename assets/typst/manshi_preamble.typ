@@ -32,5 +32,6 @@
   )
 }
 
+#let up = math.upright
 #let boldup(body) = math.bold(math.upright(body))
 

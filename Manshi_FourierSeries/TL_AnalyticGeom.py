@@ -10,12 +10,6 @@ with reloads():
 DIR = Path(__file__).parent if "__file__" in locals() else Path.cwd()
 
 
-def wrap_circular(p):
-    x, y, z = p
-    theta = y / x
-    return np.array((x * np.cos(theta), x * np.sin(theta), 0))
-
-
 class TL_AnalyticGeom(Timeline):
     CONFIG = config
 
@@ -54,11 +48,13 @@ class TL_AnalyticGeom(Timeline):
             depth=-1,
         )
         i_circleEqn = (
-            TypstMath("x^2 + y^2 = 1", **geomEqnConfig)
-            .points.next_to(UP * i_coord.x_axis.unit_size, UP, buff=0.1)
-            .rotate(-PI / 2, about_point=ORIGIN)
-            .apply_point_fn(wrap_circular)
-            .rotate(PI * 3 / 4, about_point=ORIGIN)
+            toCircular(
+                TypstMath("x^2 + y^2 = 1", **geomEqnConfig)
+                .points.next_to(UP * i_coord.x_axis.unit_size, UP, buff=0.1)
+                .rotate(-PI / 2, about_point=ORIGIN)
+                .r
+            )
+            .points.rotate(PI * 3 / 4, about_point=ORIGIN)
             .shift(i_coord.get_origin())
             .r
         )

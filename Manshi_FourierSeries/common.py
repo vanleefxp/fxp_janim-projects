@@ -1,6 +1,7 @@
 from pathlib import Path
 from numbers import Rational
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
+from typing import SupportsIndex, TYPE_CHECKING, overload
 
 from janim.imports import *
 from frozendict import frozendict
@@ -14,6 +15,42 @@ config = Config(
     ],
     typst_shared_preamble=(DIR / "../assets/typst/manshi_preamble.typ").read_text(),
 )
+BILI_PINK = "#fb7299"
+
+
+def smoothStart(smoothRatio: float) -> Callable[[float], float]:
+    r = smoothRatio
+
+    def _func(t: float) -> float:
+        if t <= 0:
+            return 0
+        elif t >= 1:
+            return 1
+        k = 1 / (1 - r / 2)
+        if t < r:
+            return t * t * k / r / 2
+        else:
+            return k * (t - r / 2)
+
+    return _func
+
+
+def smoothEnd(smoothRatio: float) -> Callable[[float], float]:
+    smoothStartFunc = smoothStart(smoothRatio)
+    return lambda x: 1 - smoothStartFunc(1 - x)
+
+
+def smoothBoth(smoothRatio: float) -> Callable[[float], float]:
+    smoothStartFunc = smoothStart(smoothRatio)
+    smoothEndFunc = smoothEnd(smoothRatio)
+
+    def _func(t: float) -> float:
+        if t < 0.5:
+            return smoothStartFunc(2 * t) / 2
+        else:
+            return (smoothEndFunc(2 * t - 1) + 1) / 2
+
+    return _func
 
 
 def cubeEdges(nDim=3) -> Iterable[tuple[int]]:
@@ -67,6 +104,21 @@ def getVecCreateAnim(item: Arrow, duration=1, arrowFadeInRatio=0.25, **kwargs):
         ),
         **kwargs,
     )
+
+
+def wrap_circular(p):
+    x, y, _ = p
+    theta = y / x
+    return np.array((x * np.cos(theta), x * np.sin(theta), 0))
+
+
+def toCircular[I: VItem](item: I) -> I:
+    for subItem in item:
+        subItem: VItem
+        x, y, *_ = subItem.points.box.center
+        theta = y / x
+        subItem.points.move_to(RIGHT * x).rotate(theta, about_point=ORIGIN)
+    return item
 
 
 def createEmptyItem() -> Dot:
@@ -518,3 +570,102 @@ class PolynomialText(Group[VItem], MarkedItem):
         )
         item.mark.set(item.mark.get() + self.mark.get())
         return item
+
+
+def get_fourier_coef_mask(n):
+    n_half = n // 2 + 1
+    mask = np.empty(n, dtype=int)
+    mask[:n_half] = np.arange(n_half)
+    mask[-n_half + 1 :] = np.arange(-n_half + 1, 0)
+    return mask
+
+
+class FourierFigure(Sequence[complex]):
+    __slots__ = ("_coefs", "_max_n")
+
+    if TYPE_CHECKING:
+
+        @overload
+        def __getitem__(self, idx: int) -> complex: ...
+
+        @overload
+        def __getitem__(self, idx: slice) -> Self: ...
+
+    def __new__(cls, coefs: Sequence[complex]) -> Self:
+        coefs = np.array(coefs, dtype=complex)
+        return cls._newFromTrustedArray(coefs)
+
+    @classmethod
+    def _newFromTrustedArray(cls, coefs: np.ndarray[complex]) -> Self:
+        self = super().__new__(cls)
+        self._coefs = coefs
+        coefs.flags.writeable = False
+        return self
+
+    def components(self, t: float) -> np.ndarray[complex]:
+        mask = get_fourier_coef_mask(len(self._coefs))
+        if isinstance(t, np.ndarray):
+            return np.exp(2j * np.pi * mask * t[:, None]) * self._coefs
+        else:
+            return np.exp(2j * np.pi * mask * t) * self._coefs
+
+    def __call__(self, t: float) -> complex:
+        components = self.components(t)
+        if isinstance(t, np.ndarray):
+            return np.sum(components, axis=1)
+        else:
+            return np.sum(components)
+
+    @property
+    def coefs(self) -> np.ndarray[complex]:
+        return self._coefs
+
+    @property
+    def max_n(self) -> int:
+        if not hasattr(self, "_max_n"):
+            self._max_n = len(self._coefs) // 2 + 1
+        return self._max_n
+
+    def __len__(self) -> int:
+        return len(self._coefs)
+
+    def __getitem__(self, idx):
+        if isinstance(idx, SupportsIndex):
+            if idx >= self.max_n or idx <= -self.max_n:
+                return 0
+            return self._coefs[idx]
+        elif isinstance(idx, slice):
+            start, stop, step = idx.start, idx.stop, idx.step
+            if start is not None or step is not None or stop is None or stop < 0:
+                raise ValueError(f"Unsupported slice: {idx}")
+            if stop == 0:
+                return self._newFromTrustedArray(np.array((0,)))
+            elif stop == 1:
+                return self._newFromTrustedArray(np.array((self._coefs[0],)))
+            elif stop >= self.max_n:
+                return self
+            else:
+                return self._newFromTrustedArray(
+                    np.concat((self._coefs[:stop], self._coefs[-stop + 1 :]))
+                )
+
+    def __iter__(self):
+        return iter(self._coefs)
+
+
+def complex2point(c: complex):
+    return np.array((c.real, c.imag, 0))
+
+
+def toPointsFn(fn: Callable[[float], complex]) -> Callable[[float], Vect]:
+    def pointsFn(t):
+        return complex2point(fn(t))
+
+    return pointsFn
+
+
+def alternatingSignedInts(stop_abs=None):
+    yield 0
+    for i in it.count(1) if stop_abs is None else range(1, stop_abs):
+        yield i
+        yield -i
