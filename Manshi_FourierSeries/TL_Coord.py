@@ -103,8 +103,8 @@ class TL_Coord(Timeline):
         i_ux = Line(originPoint, i_coord.c2p(1, 0)).stroke.set(color=RED).r
         i_uy = Line(originPoint, i_coord.c2p(0, 1)).stroke.set(color=GREEN).r
 
-        i_ux.add_tip(fill_color=RED, **arrowConfig)
-        i_uy.add_tip(fill_color=GREEN, **arrowConfig)
+        i_ux.add_tip(fill_color=RED, **arrowCfg)
+        i_uy.add_tip(fill_color=GREEN, **arrowCfg)
 
         self.forward(1)
         self.play(

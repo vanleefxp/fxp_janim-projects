@@ -67,8 +67,8 @@ class TL_PolynomialAdd(Timeline):
         vec_sum = vec_p + vec_q
         vecScale = 1.8
 
-        i_vpTem = Vector(vec_p, color=RED, tip_kwargs=arrowConfig)
-        i_vqTem = Vector(vec_q, color=GREEN, tip_kwargs=arrowConfig)
+        i_vpTem = Vector(vec_p, color=RED, tip_kwargs=arrowCfg)
+        i_vqTem = Vector(vec_q, color=GREEN, tip_kwargs=arrowCfg)
 
         i_vp1 = i_vpTem.copy().points.shift((-6, -1.25, 0)).r
         i_vq1 = i_vqTem.copy().points.shift((-6, -1.5, 0)).r
@@ -77,7 +77,7 @@ class TL_PolynomialAdd(Timeline):
         i_vp2 = i_vpTem.copy().points.shift(vec2Pos).r
         i_vq2 = i_vqTem.copy().points.shift(vec2Pos).r
         i_vSum = (
-            Vector(vec_sum, color=BLUE, tip_kwargs=arrowConfig).points.shift(vec2Pos).r
+            Vector(vec_sum, color=BLUE, tip_kwargs=arrowCfg).points.shift(vec2Pos).r
         )
         i_lineToVp = Line(
             i_vp2.points.get_end(),
@@ -97,7 +97,7 @@ class TL_PolynomialAdd(Timeline):
         vec3Pos = np.array((3, -2.25, 0))
         i_vp3 = i_vpTem.copy().points.shift(vec3Pos).r
         i_vMul = (
-            Vector(vec_p * vecScale, color=PINK, depth=1, tip_kwargs=arrowConfig)
+            Vector(vec_p * vecScale, color=PINK, depth=1, tip_kwargs=arrowCfg)
             .points.shift(vec3Pos)
             .r
         )

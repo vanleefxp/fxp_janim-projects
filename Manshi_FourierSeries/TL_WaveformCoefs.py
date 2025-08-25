@@ -7,7 +7,6 @@ from fantazia.synth.waveform import (
     TriangleWave,
     SawtoothWave,
 )
-from frozendict import frozendict
 
 with reloads():
     from common import *
@@ -43,61 +42,6 @@ class SineDiagram(Rect):
     @property
     def i_graph(self) -> FunctionGraph:
         return self[0]
-
-
-_waveformDiagramDefaults = frozendict(
-    color=GREEN_SCREEN,
-    glow_size=0.5,
-    glow_alpha=0.5,
-    glow_color=GREEN_SCREEN,
-)
-
-
-class WaveformDiagram(Rect, MarkedItem):
-    def __init__(self, waveform, divs=200, width=12, height=2, **kwargs):
-        super().__init__(
-            (0, -1, 0), (1, 1, 0), stroke_alpha=0, stroke_radius=0, fill_alpha=0
-        )
-        graphConfig = _waveformDiagramDefaults | kwargs
-        if isinstance(waveform, SquareWave):
-            half_sqrt_2 = np.sqrt(2) / 2
-            i_graph = Polyline(
-                (0, 0, 0),
-                (0, half_sqrt_2, 0),
-                (0.5, half_sqrt_2, 0),
-                (0.5, -half_sqrt_2, 0),
-                (1, -half_sqrt_2, 0),
-                (1, 0, 0),
-                **graphConfig,
-            )
-        elif isinstance(waveform, TriangleWave):
-            half_sqrt_6 = np.sqrt(6) / 2
-            i_graph = Polyline(
-                (0, 0, 0),
-                (0.25, half_sqrt_6, 0),
-                (0.75, -half_sqrt_6, 0),
-                (1, 0, 0),
-                **graphConfig,
-            )
-        elif isinstance(waveform, SawtoothWave):
-            half_sqrt_6 = np.sqrt(6) / 2
-            i_graph = Polyline(
-                (0, 0, 0),
-                (0, half_sqrt_6, 0),
-                (1, -half_sqrt_6, 0),
-                (1, 0, 0),
-                **graphConfig,
-            )
-        else:
-            i_graph = FunctionGraph(
-                waveform,
-                (0, 1, 1 / divs),
-                **graphConfig,
-            )
-        self.add(i_graph)
-        self.mark.set_points(((0.5, 0, 0),))
-        self.points.scale((width, height / 2, 1))
-        self.mark.set(ORIGIN)
 
 
 class TL_WaveformCoefs(Timeline):
@@ -172,7 +116,7 @@ class TL_WaveformCoefs(Timeline):
             return Group(i_cosCoefs, i_sinCoefs)
 
         def createWaveform(waveform: Waveform) -> WaveformDiagram:
-            return WaveformDiagram(waveform).mark.set((0, 1.875, 0)).r
+            return WaveformDiagram(waveform, glow_size=0.5).mark.set((0, 1.875, 0)).r
 
         def animateWaveformCreation(waveform: Waveform):
             nonlocal i_waveform, coefs

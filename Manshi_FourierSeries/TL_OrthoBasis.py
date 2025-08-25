@@ -38,7 +38,7 @@ class TL_OrthoBasis(Timeline):
             i_coord.c2p(1, 0),
             buff=0,
             color=RED,
-            tip_kwargs=arrowConfig,
+            tip_kwargs=arrowCfg,
             depth=0,
         )
         i_uy = Arrow(
@@ -46,7 +46,7 @@ class TL_OrthoBasis(Timeline):
             i_coord.c2p(0, 1),
             buff=0,
             color=GREEN,
-            tip_kwargs=arrowConfig,
+            tip_kwargs=arrowCfg,
             depth=0,
         )
         i_vec = Arrow(
@@ -54,7 +54,7 @@ class TL_OrthoBasis(Timeline):
             i_coord.c2p(*vec),
             buff=0,
             color=PINK,
-            tip_kwargs=arrowConfig,
+            tip_kwargs=arrowCfg,
         )
 
         i_projX = Line(

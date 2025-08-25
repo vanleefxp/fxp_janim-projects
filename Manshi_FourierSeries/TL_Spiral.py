@@ -50,7 +50,7 @@ class TL_Spiral(Timeline):
         velocity = 1.6
         axis_pad = 0.5
         axis_range = (-radius - axis_pad, radius + axis_pad, radius)
-        axis_cfg = frozendict(include_tip=True, tip_config=arrowConfig, tick_size=0.05)
+        axis_cfg = frozendict(include_tip=True, tip_config=arrowCfg, tick_size=0.05)
         i_coord = Axes(
             x_range=axis_range,
             y_range=axis_range,
@@ -98,10 +98,9 @@ class TL_Spiral(Timeline):
             getSpiralFn(radius, velocity), (0, t_max, 0.05), color=GREEN_SCREEN
         )
 
-        eqnCfg = frozendict(stroke_radius=0.005, stroke_alpha=1, depth=-2)
         i_circEq: TypstMath = (
             toCircular(
-                TypstMath("up(e)^(2 pi up(i) t)", **eqnCfg)
+                TypstMath("up(e)^(2 pi up(i) t)", **textCfg)
                 .points.scale(0.95)
                 .next_to(i_circ, UP, buff=0.1)
                 .rotate(-PI / 2, about_point=ORIGIN)
@@ -112,7 +111,7 @@ class TL_Spiral(Timeline):
         )
         i_circEqLarge: TypstMath = (
             toCircular(
-                TypstMath("up(e)^(2 pi up(i) t)", **eqnCfg)
+                TypstMath("up(e)^(2 pi up(i) t)", **textCfg)
                 .points.scale(1.125)
                 .next_to(i_circ, UP, buff=0.1)
                 .rotate(-PI / 2, about_point=ORIGIN)
@@ -122,7 +121,7 @@ class TL_Spiral(Timeline):
             .r
         )
         i_sineEq = (
-            TypstMath("sin(2 pi t)", **eqnCfg)
+            TypstMath("sin(2 pi t)", **textCfg)
             .points.next_to(
                 (projectionDist, radius + axis_pad, 0),
                 UR,
@@ -131,7 +130,7 @@ class TL_Spiral(Timeline):
             .r
         )
         i_cosineEq = (
-            TypstMath("cos(2 pi t)", **eqnCfg)
+            TypstMath("cos(2 pi t)", **textCfg)
             .points.rotate(-PI / 2)
             .next_to(
                 (radius + axis_pad, projectionDist, 0),
@@ -401,13 +400,13 @@ class TL_Spiral(Timeline):
         )
         i_realBg = toProjectionDown(i_bgRect.copy())
         i_cosineEqProj = toProjectionDown(
-            TypstMath("cos(2 pi t)", **eqnCfg)
+            TypstMath("cos(2 pi t)", **textCfg)
             .points.next_to((0, radius + axis_pad, 0), UR, buff=0.1)
             .r,
             False,
         )
         i_cosineLabel: TypstMath = toProjectionDown(
-            TypstMath("cos(2 pi t)", **eqnCfg)
+            TypstMath("cos(2 pi t)", **textCfg)
             .points.scale(1.5)
             .next_to(i_bgRect.points.self_box.get(DL), DR, buff=0.1)
             .r
@@ -434,13 +433,13 @@ class TL_Spiral(Timeline):
         )
         i_imagBg = toProjectionRight(i_bgRect.copy())
         i_sineEqProj = toProjectionRight(
-            TypstMath("sin(2 pi t)", **eqnCfg)
+            TypstMath("sin(2 pi t)", **textCfg)
             .points.next_to((0, radius + axis_pad, 0), UR, buff=0.1)
             .r,
             False,
         )
         i_sineLabel: TypstMath = toProjectionRight(
-            TypstMath("sin(2 pi t)", **eqnCfg)
+            TypstMath("sin(2 pi t)", **textCfg)
             .points.scale(1.5)
             .next_to(i_bgRect.points.self_box.get(UL), UR, buff=0.1)
             .r
@@ -686,25 +685,25 @@ class TL_Spiral(Timeline):
             )
 
             i_realEqProj = toProjectionDown(
-                Text("Re", **eqnCfg)
+                Text("Re", **textCfg)
                 .points.next_to((0, radius + axis_pad, 0), UR, buff=0.1)
                 .r,
                 False,
             )
             i_imagEqProj = toProjectionRight(
-                Text("Im", **eqnCfg)
+                Text("Im", **textCfg)
                 .points.next_to((0, radius + axis_pad, 0), UR, buff=0.1)
                 .r,
                 False,
             )
             i_realLabel: Text = toProjectionDown(
-                Text("Re", **eqnCfg)
+                Text("Re", **textCfg)
                 .points.scale(1.5)
                 .next_to(i_bgRect.points.self_box.get(DL), DR, buff=(0.1, 0.2, 0))
                 .r
             )
             i_imagLabel: Text = toProjectionRight(
-                Text("Im", **eqnCfg)
+                Text("Im", **textCfg)
                 .points.scale(1.5)
                 .next_to(i_bgRect.points.self_box.get(UL), UR, buff=(0.1, 0.2, 0))
                 .r

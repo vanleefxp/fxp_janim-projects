@@ -23,10 +23,10 @@ class TL_AnalyticGeom(Timeline):
                 x_axis_config=dict(
                     unit_size=2.25,
                     include_tip=True,
-                    tip_config=arrowConfig,
+                    tip_config=arrowCfg,
                 ),
                 y_axis_config=dict(
-                    unit_size=2.25, include_tip=True, tip_config=arrowConfig
+                    unit_size=2.25, include_tip=True, tip_config=arrowCfg
                 ),
             )
             .points.shift((-3.25, 0.25, 0))
