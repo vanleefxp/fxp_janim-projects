@@ -1,29 +1,29 @@
 from janim.imports import *
+from common import *
+from fourier_figure import FourierFigure
 
 with reloads():
     from common import *
+    from fourier_figure import FourierFigure
 
 
 class TL_FourierSeriesAnim(Timeline):
     CONFIG = config
 
     def construct(self):
-        # 加载傅里叶系数
-        coefs = np.load(DIR / "assets/data/fourier-coefs/cxk.npy")
+        coefs_file = DIR / "assets/data/fourier-coefs/cxk.npz"
         max_n = 50
-        scale = 2.5
-        startPoint = np.array((0, 0.25, 0))
+        scale = 坤
+        startPoint = ORIGIN
 
+        # 加载傅里叶级数图形
         # 限制最大向量对数
-        fig: FourierFigure = FourierFigure(coefs)[:max_n]
+        fig: FourierFigure = FourierFigure(coefs_file)[:max_n]
         max_n = fig.max_n
         coefs = fig.coefs
 
-        # 重新排序傅里叶系数，顺序如 0, 1, -1, 2, -2, 3, -3, ...
-        coefs_alternating = np.empty_like(coefs)
-        coefs_alternating[0] = coefs[0]
-        coefs_alternating[1::2] = coefs[1 : fig.max_n]
-        coefs_alternating[2::2] = coefs[-1 : -fig.max_n : -1]
+        # 重新排序傅里叶系数
+        coefs_alternating = fftalt(coefs)
         coefsabs_alternating = np.abs(coefs_alternating)
 
         # 生成目标图像

@@ -1,7 +1,9 @@
 from janim.imports import *
 from frozendict import frozendict
+from fourier_figure import FourierFigure
 
 with reloads():
+    from fourier_figure import FourierFigure
     from common import *
 
 
@@ -50,7 +52,6 @@ class TL_Spiral(Timeline):
         velocity = 1.6
         axis_pad = 0.5
         axis_range = (-radius - axis_pad, radius + axis_pad, radius)
-        axis_cfg = frozendict(include_tip=True, tip_config=arrowCfg, tick_size=0.05)
         i_coord = Axes(
             x_range=axis_range,
             y_range=axis_range,
@@ -640,11 +641,10 @@ class TL_Spiral(Timeline):
         self.forward(2)
 
         # 加载傅里叶系数
-        coefs = np.load(DIR / "assets/data/fourier-coefs/like.npy")
+        coefs_file = DIR / "assets/data/fourier-coefs/like.npz"
         max_n = 20
-        fig: FourierFigure = FourierFigure(coefs)[:max_n]
+        fig: FourierFigure = FourierFigure(coefs_file)[:max_n]
         max_n = fig.max_n
-        coefs = fig.coefs
 
         def animateFigureSpiral(fig: FourierFigure = fig):
             i_figure = ParametricCurve(
@@ -843,6 +843,11 @@ if __name__ == "__main__":
 
     subprocess.run(["janim", "run", __file__, "-i"])
 
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
 ################################################################################
 ################################################################################
 ################################################################################

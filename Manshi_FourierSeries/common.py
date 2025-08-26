@@ -1,7 +1,6 @@
 from pathlib import Path
 from numbers import Rational
-from collections.abc import Mapping, Sequence
-from typing import SupportsIndex, TYPE_CHECKING, overload
+from collections.abc import Mapping
 
 from janim.imports import *
 from frozendict import frozendict
@@ -9,6 +8,7 @@ from fantazia.synth.waveform import SquareWave, TriangleWave, SawtoothWave
 
 DIR = Path(__file__).parent if "__file__" in locals() else Path.cwd()
 arrowCfg = dict(center_anchor="front", body_length=0.15, back_width=0.15)
+axis_cfg = frozendict(include_tip=True, tip_config=arrowCfg, tick_size=0.05)
 textCfg = frozendict(stroke_radius=0.005, stroke_alpha=1, depth=-2)
 config = Config(
     font=[
@@ -18,6 +18,7 @@ config = Config(
     typst_shared_preamble=(DIR / "../assets/typst/manshi_preamble.typ").read_text(),
 )
 BILI_PINK = "#fb7299"
+坤 = 2.5
 
 
 def smoothStart(smoothRatio: float) -> Callable[[float], float]:
@@ -574,87 +575,6 @@ class PolynomialText(Group[VItem], MarkedItem):
         return item
 
 
-def get_fourier_coef_mask(n):
-    n_half = n // 2 + 1
-    mask = np.empty(n, dtype=int)
-    mask[:n_half] = np.arange(n_half)
-    mask[-n_half + 1 :] = np.arange(-n_half + 1, 0)
-    return mask
-
-
-class FourierFigure(Sequence[complex]):
-    __slots__ = ("_coefs", "_max_n")
-
-    if TYPE_CHECKING:
-
-        @overload
-        def __getitem__(self, idx: int) -> complex: ...
-
-        @overload
-        def __getitem__(self, idx: slice) -> Self: ...
-
-    def __new__(cls, coefs: Sequence[complex]) -> Self:
-        coefs = np.array(coefs, dtype=complex)
-        return cls._newFromTrustedArray(coefs)
-
-    @classmethod
-    def _newFromTrustedArray(cls, coefs: np.ndarray[complex]) -> Self:
-        self = super().__new__(cls)
-        self._coefs = coefs
-        coefs.flags.writeable = False
-        return self
-
-    def components(self, t: float) -> np.ndarray[complex]:
-        mask = get_fourier_coef_mask(len(self._coefs))
-        if isinstance(t, np.ndarray):
-            return np.exp(2j * np.pi * mask * t[:, None]) * self._coefs
-        else:
-            return np.exp(2j * np.pi * mask * t) * self._coefs
-
-    def __call__(self, t: float) -> complex:
-        components = self.components(t)
-        if isinstance(t, np.ndarray):
-            return np.sum(components, axis=1)
-        else:
-            return np.sum(components)
-
-    @property
-    def coefs(self) -> np.ndarray[complex]:
-        return self._coefs
-
-    @property
-    def max_n(self) -> int:
-        if not hasattr(self, "_max_n"):
-            self._max_n = len(self._coefs) // 2 + 1
-        return self._max_n
-
-    def __len__(self) -> int:
-        return len(self._coefs)
-
-    def __getitem__(self, idx):
-        if isinstance(idx, SupportsIndex):
-            if idx >= self.max_n or idx <= -self.max_n:
-                return 0
-            return self._coefs[idx]
-        elif isinstance(idx, slice):
-            start, stop, step = idx.start, idx.stop, idx.step
-            if start is not None or step is not None or stop is None or stop < 0:
-                raise ValueError(f"Unsupported slice: {idx}")
-            if stop == 0:
-                return self._newFromTrustedArray(np.array((0,)))
-            elif stop == 1:
-                return self._newFromTrustedArray(np.array((self._coefs[0],)))
-            elif stop >= self.max_n:
-                return self
-            else:
-                return self._newFromTrustedArray(
-                    np.concat((self._coefs[:stop], self._coefs[-stop + 1 :]))
-                )
-
-    def __iter__(self):
-        return iter(self._coefs)
-
-
 def complex2point(c: complex):
     return np.array((c.real, c.imag, 0))
 
@@ -732,3 +652,15 @@ class WaveformDiagram(Rect, MarkedItem):
     @property
     def i_graph(self) -> VItem:
         return self[0]
+
+
+def fftalt(coefs: np.ndarray) -> np.ndarray:
+    # 将傅里叶级数的系数排列成正负交替的形态
+    # 下标顺序形如 0, 1, -1, 2, -2, 3, -3, ...
+    max_n = len(coefs) // 2 + 1
+    coefs_alternating = np.empty_like(coefs)
+    coefs_alternating[0] = coefs[0]
+    coefs_alternating[1::2] = coefs[1:max_n]
+    coefs_alternating[2::2] = coefs[-1:-max_n:-1]
+
+    return coefs_alternating
