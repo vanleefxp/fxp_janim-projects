@@ -40,12 +40,8 @@ class TL_AnalyticGeom(Timeline):
         i_pM = Dot(i_coord.c2p(ratio, 0), radius=0.06, depth=-1)
         i_pP = Dot(i_coord.c2p(1, 0), radius=0.06, depth=-1)
 
-        geomEqnConfig = frozendict(
+        geomEqnConfig = textCfg | frozendict(
             preamble="#set text(size: 9pt)",
-            stroke_radius=0.005,
-            stroke_color=WHITE,
-            stroke_alpha=1,
-            depth=-1,
         )
         i_circleEqn = (
             toCircular(

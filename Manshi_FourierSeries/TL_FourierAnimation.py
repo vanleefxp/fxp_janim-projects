@@ -7,13 +7,15 @@ with reloads():
     from fourier_figure import FourierFigure
 
 
+# Manim 经典案例：傅里叶级数动画
+# 此处用 JAnim 来复现此经典动画
 class TL_FourierSeriesAnim(Timeline):
     CONFIG = config
 
     def construct(self):
-        coefs_file = DIR / "assets/data/fourier-coefs/cxk.npz"
-        max_n = 50
-        scale = 坤
+        coefs_file = DIR / "assets/data/fourier-coefs/like.npz"
+        max_n = 40
+        scale = 2.5
         startPoint = ORIGIN
 
         # 加载傅里叶级数图形
@@ -83,31 +85,28 @@ class TL_FourierSeriesAnim(Timeline):
                 i_dot.points.move_to(p_next)
 
         updateVectors(0)
-        self.play(FadeIn(i_startPoint), duration=0.5)
+        self.forward(0.25)
 
-        agCfg = frozendict(lag_ratio=0.5, duration=2)
-        ag_vecs = AnimGroup(
-            *(
-                Create(item, duration=coefabs, rate_func=linear)
-                for item, coefabs in zip(i_vecs, coefsabs_alternating)
-            ),
-            **agCfg,
-        )
-        ag_circs = AnimGroup(
-            *(
-                FadeIn(item, duration=coefabs)
-                for item, coefabs in zip(i_circs, coefsabs_alternating)
-            ),
-            **agCfg,
-        )
-        ag_points = AnimGroup(
-            *(
-                FadeIn(item, duration=coefabs)
-                for item, coefabs in zip(i_points, coefsabs_alternating)
-            ),
-            **agCfg,
-        )
-        self.play(ag_vecs, ag_circs, ag_points)
+        lag_ratio = 1 / 8
+        ag1 = []
+        ag2 = []
+        ag3 = []
+        for i_circ, i_line, i_point, coef in zip(
+            i_circs,
+            i_vecs,
+            i_points,
+            coefs_alternating,
+        ):
+            duration = np.sqrt(np.abs(coef))
+            ag1.append(GrowFromCenter(i_circ, duration=duration))
+            ag2.append(Create(i_line, duration=duration))
+            ag3.append(
+                GrowFromPoint(i_point, i_circ.points.self_box.center, duration=duration)
+            )
+        ag1 = AnimGroup(*ag1, lag_ratio=lag_ratio)
+        ag2 = AnimGroup(*ag2, lag_ratio=lag_ratio)
+        ag3 = AnimGroup(*ag3, lag_ratio=lag_ratio)
+        self.play(FadeIn(i_startPoint), ag1, ag2, ag3, duration=3)
 
         self.forward(1)
         anim_duration = 15
@@ -124,36 +123,28 @@ class TL_FourierSeriesAnim(Timeline):
         )
         self.forward(1)
 
-        agCfg = frozendict(lag_ratio=0.5, duration=2)
-        ag_vecs = AnimGroup(
-            *reversed(
-                [
-                    Uncreate(item, duration=coefabs, rate_func=linear)
-                    for item, coefabs in zip(i_vecs, coefsabs_alternating)
-                ]
-            ),
-            **agCfg,
-        )
-        ag_circs = AnimGroup(
-            *reversed(
-                [
-                    FadeOut(item, duration=coefabs)
-                    for item, coefabs in zip(i_circs, coefsabs_alternating)
-                ]
-            ),
-            **agCfg,
-        )
-        ag_points = AnimGroup(
-            *reversed(
-                [
-                    FadeOut(item, duration=coefabs)
-                    for item, coefabs in zip(i_points, coefsabs_alternating)
-                ]
-            ),
-            **agCfg,
-        )
-        self.play(ag_vecs, ag_circs, ag_points)
-        self.play(FadeOut(i_startPoint), duration=0.5)
+        lag_ratio = 1 / 8
+        ag1 = []
+        ag2 = []
+        ag3 = []
+        for i_circ, i_line, i_point, coef in zip(
+            i_circs,
+            i_vecs,
+            i_points,
+            coefs_alternating,
+        ):
+            duration = np.sqrt(np.abs(coef))
+            ag1.append(ShrinkToCenter(i_circ, duration=duration))
+            ag2.append(Uncreate(i_line, duration=duration))
+            ag3.append(
+                ShrinkToPoint(i_point, i_circ.points.self_box.center, duration=duration)
+            )
+        for ag in ag1, ag2, ag3:
+            ag.reverse()
+        ag1 = AnimGroup(*ag1, lag_ratio=lag_ratio)
+        ag2 = AnimGroup(*ag2, lag_ratio=lag_ratio)
+        ag3 = AnimGroup(*ag3, lag_ratio=lag_ratio)
+        self.play(ag1, ag2, ag3, FadeOut(i_startPoint), duration=3)
 
         # print(coefs)
         self.forward(2)

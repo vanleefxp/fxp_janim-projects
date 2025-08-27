@@ -328,6 +328,7 @@ class TL_WaveformFreqDomain(Timeline):
         #         .r
         #     )
 
+        # 生成频谱柱状图
         self.hide(
             i_harmonicsCompressed,
             i_waveformCompressed,
@@ -340,6 +341,7 @@ class TL_WaveformFreqDomain(Timeline):
             Transform(i_zAxis, i_newZAxis),
             # FadeIn(i_axisNumbers),
             self.camera.anim.restore(i_cameraRight2),
+            duration=4,
         )
         i_ampLabel = (
             Text("振幅", **textCfg)
@@ -355,11 +357,24 @@ class TL_WaveformFreqDomain(Timeline):
             .rotate(PI / 2, axis=UP, about_point=ORIGIN)
             .r
         )
+        self.forward(1)
         self.show(i_phaseBarsCompressed)
         self.play(
             Transform(i_phaseBarsCompressed, i_phaseBars),
             *(FadeIn(item) for item in (i_ampLabel, i_phaseLabel)),
+            duration=2,
         )
+        self.forward(1)
+        self.play(i_ampBars.anim.set(fill_alpha=0.25, stroke_alpha=0.5), duration=0.5)
+        self.forward(0.5)
+        i_ampBars[0].anim.set(fill_alpha=0.5, stroke_alpha=1)
+        for i, (i_bar1, i_bar2) in enumerate(it.pairwise(i_ampBars), 1):
+            self.play_audio(a_penClick)
+            i_bar1.set(fill_alpha=0.25, stroke_alpha=0.5)
+            i_bar2.set(fill_alpha=0.5, stroke_alpha=1)
+            self.forward(firstTime * incFactor**i)
+        self.forward(0.5)
+        self.play(i_ampBars.anim.set(fill_alpha=0.5, stroke_alpha=1), duration=0.5)
         self.forward(2)
 
 
